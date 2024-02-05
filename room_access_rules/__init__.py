@@ -17,6 +17,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 import attr
+from synapse.api.constants import EventTypes, JoinRules, Membership, RoomCreationPreset
 from synapse.events import EventBase
 from synapse.module_api import ModuleApi, UserID
 from synapse.module_api.errors import ConfigError, SynapseError
@@ -25,34 +26,6 @@ from synapse.types import Requester, StateMap
 logger = logging.getLogger(__name__)
 
 ACCESS_RULES_TYPE = "im.vector.room.access_rules"
-
-
-class EventTypes:
-    Member = "m.room.member"
-    Tombstone = "m.room.tombstone"
-    JoinRules = "m.room.join_rules"
-    PowerLevels = "m.room.power_levels"
-    ThirdPartyInvite = "m.room.third_party_invite"
-    RoomHistoryVisibility = "m.room.history_visibility"
-    CanonicalAlias = "m.room.canonical_alias"
-    RoomAvatar = "m.room.avatar"
-    RoomEncryption = "m.room.encryption"
-    Topic = "m.room.topic"
-    Name = "m.room.name"
-    ServerACL = "m.room.server_acl"
-
-
-class JoinRules:
-    PUBLIC = "public"
-
-
-class Membership:
-    INVITE = "invite"
-    JOIN = "join"
-
-
-class RoomCreationPreset:
-    PUBLIC_CHAT = "public_chat"
 
 
 class AccessRules:
@@ -364,7 +337,7 @@ class RoomAccessRules(object):
                     self._is_power_level_content_allowed(
                         event.content, rule, on_room_creation=False
                     ),
-                    None
+                    None,
                 )
 
             if (

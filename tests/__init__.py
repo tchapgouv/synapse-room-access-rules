@@ -12,20 +12,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
+from typing import Any, Dict, Optional
 from unittest.mock import Mock
 
 import attr
 from synapse.module_api import ModuleApi, UserID
 
-from room_access_rules import RoomAccessRules, ACCESS_RULES_TYPE
+from room_access_rules import ACCESS_RULES_TYPE, RoomAccessRules
 
 PUBLIC_ROOM_ID = "!public:example.com"
 
 
 class MockHttpClient:
     async def get_json(self, uri, args):
-        return {"hs": args["address"].split('@')[1]}
+        return {"hs": args["address"].split("@")[1]}
 
 
 class MockPublicRoomListManager:
@@ -41,6 +41,7 @@ class MockRequester:
 @attr.s(auto_attribs=True)
 class MockEvent:
     """Mocks an event. Only exposes properties the module uses."""
+
     sender: str
     type: str
     content: dict
@@ -69,13 +70,17 @@ def new_access_rules_event(sender: str, room_id: str, rule: str) -> MockEvent:
     )
 
 
-def create_module(config_override={}) -> RoomAccessRules:
+def create_module(
+    config_override: Optional[Dict[str, Any]] = None, server_name: str = "example.com"
+) -> RoomAccessRules:
     # Create a mock based on the ModuleApi spec, but override some mocked functions
     # because some capabilities are needed for running the tests.
     module_api = Mock(spec=ModuleApi)
     module_api.http_client = MockHttpClient()
     module_api.public_room_list_manager = MockPublicRoomListManager()
 
+    if config_override is None:
+        config_override = {}
     config_override["id_server"] = "example.com"
 
     config = RoomAccessRules.parse_config(config_override)

@@ -19,10 +19,10 @@ from room_access_rules import (
     ACCESS_RULES_TYPE,
     AccessRules,
     EventTypes,
-    Membership,
     JoinRules,
+    Membership,
 )
-from tests import create_module, MockEvent, new_access_rules_event
+from tests import MockEvent, create_module, new_access_rules_event
 
 
 class SendEventTestCase(aiounittest.AsyncTestCase):
@@ -138,12 +138,14 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         )
 
         allowed, _ = await self.module.check_event_allowed(
-            event=pl_event, state_events=self.direct_room_state,
+            event=pl_event,
+            state_events=self.direct_room_state,
         )
         self.assertTrue(allowed)
 
         allowed, _ = await self.module.check_event_allowed(
-            event=pl_event, state_events=self.unrestricted_room_state,
+            event=pl_event,
+            state_events=self.unrestricted_room_state,
         )
         self.assertFalse(allowed)
 
@@ -229,7 +231,8 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         )
 
         allowed, _ = await self.module.check_event_allowed(
-            event=join_event, state_events=self.direct_room_state,
+            event=join_event,
+            state_events=self.direct_room_state,
         )
         self.assertTrue(allowed)
 
@@ -238,11 +241,15 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         state_with_join[(EventTypes.Member, self.allowed_invitee)] = join_event
 
         leave_event = self._new_membership_event(
-            self.allowed_invitee, self.allowed_invitee, "leave", self.direct_room,
+            self.allowed_invitee,
+            self.allowed_invitee,
+            "leave",
+            self.direct_room,
         )
 
         allowed, _ = await self.module.check_event_allowed(
-            event=leave_event, state_events=state_with_join,
+            event=leave_event,
+            state_events=state_with_join,
         )
         self.assertTrue(allowed)
 
@@ -251,11 +258,15 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         state_with_leave[(EventTypes.Member, self.allowed_invitee)] = leave_event
 
         invite_event = self._new_membership_event(
-            self.room_creator, self.allowed_invitee, Membership.INVITE, self.direct_room,
+            self.room_creator,
+            self.allowed_invitee,
+            Membership.INVITE,
+            self.direct_room,
         )
 
         allowed, _ = await self.module.check_event_allowed(
-            event=invite_event, state_events=state_with_leave,
+            event=invite_event,
+            state_events=state_with_leave,
         )
         self.assertTrue(allowed)
 
@@ -293,8 +304,10 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         # Test that we can send a 3PID invite to a room in which we've always been the
         # only member.
         state_with_3pid_invite = state_with_no_invite.copy()
-        state_with_3pid_invite[(EventTypes.ThirdPartyInvite, "othertoken")] = (
-            self._new_3pid_invite(self.room_creator, self.direct_room, token="othertoken")
+        state_with_3pid_invite[
+            (EventTypes.ThirdPartyInvite, "othertoken")
+        ] = self._new_3pid_invite(
+            self.room_creator, self.direct_room, token="othertoken"
         )
 
         # Test that we can't send a 3PID invite to a room in which there's already a 3PID
@@ -409,53 +422,65 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         # We can't change the rule from restricted to direct.
         allowed, _ = await self.module.check_event_allowed(
             event=new_access_rules_event(
-                self.room_creator, self.restricted_room, AccessRules.DIRECT,
+                self.room_creator,
+                self.restricted_room,
+                AccessRules.DIRECT,
             ),
-            state_events=self.restricted_room_state
+            state_events=self.restricted_room_state,
         )
         self.assertFalse(allowed)
 
         # We can change the rule from restricted to unrestricted.
         allowed, _ = await self.module.check_event_allowed(
             event=new_access_rules_event(
-                self.room_creator, self.restricted_room, AccessRules.UNRESTRICTED,
+                self.room_creator,
+                self.restricted_room,
+                AccessRules.UNRESTRICTED,
             ),
-            state_events=self.restricted_room_state
+            state_events=self.restricted_room_state,
         )
         self.assertTrue(allowed)
 
         # We can't change the rule from unrestricted to restricted.
         allowed, _ = await self.module.check_event_allowed(
             event=new_access_rules_event(
-                self.room_creator, self.unrestricted_room, AccessRules.RESTRICTED,
+                self.room_creator,
+                self.unrestricted_room,
+                AccessRules.RESTRICTED,
             ),
-            state_events=self.unrestricted_room_state
+            state_events=self.unrestricted_room_state,
         )
         self.assertFalse(allowed)
 
         # We can't change the rule from unrestricted to direct.
         allowed, _ = await self.module.check_event_allowed(
             event=new_access_rules_event(
-                self.room_creator, self.unrestricted_room, AccessRules.DIRECT,
+                self.room_creator,
+                self.unrestricted_room,
+                AccessRules.DIRECT,
             ),
-            state_events=self.unrestricted_room_state
+            state_events=self.unrestricted_room_state,
         )
         self.assertFalse(allowed)
 
         # We can't change the rule from direct to restricted.
         allowed, _ = await self.module.check_event_allowed(
             event=new_access_rules_event(
-                self.room_creator, self.direct_room, AccessRules.RESTRICTED,
+                self.room_creator,
+                self.direct_room,
+                AccessRules.RESTRICTED,
             ),
-            state_events=self.direct_room_state
+            state_events=self.direct_room_state,
         )
         self.assertFalse(allowed)
 
         allowed, _ = await self.module.check_event_allowed(
             event=new_access_rules_event(
-                self.room_creator, self.direct_room, AccessRules.UNRESTRICTED,
+                self.room_creator,
+                self.direct_room,
+                AccessRules.UNRESTRICTED,
             ),
-            state_events=self.direct_room_state
+            state_events=self.direct_room_state,
         )
         self.assertFalse(allowed)
 
@@ -469,7 +494,12 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
                 type=EventTypes.RoomAvatar,
                 state_key="",
                 content={
-                    "info": {"h": 398, "mimetype": "image/jpeg", "size": 31037, "w": 394},
+                    "info": {
+                        "h": 398,
+                        "mimetype": "image/jpeg",
+                        "size": 31037,
+                        "w": 394,
+                    },
                     "url": "mxc://example.org/JWEIFJgwEIhweiWJE",
                 },
             ),
@@ -528,7 +558,9 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
 
         # Check that the invite is allowed.
         invite_event = self._new_3pid_invite(
-            self.room_creator, self.direct_room, invite_content,
+            self.room_creator,
+            self.direct_room,
+            invite_content,
         )
 
         allowed, _ = await self.module.check_event_allowed(
@@ -539,12 +571,16 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         self.assertTrue(allowed)
 
         # Add the invite into the room's state so we can revoke it.
-        state_events[(EventTypes.ThirdPartyInvite, invite_event.state_key)] = invite_event
+        state_events[
+            (EventTypes.ThirdPartyInvite, invite_event.state_key)
+        ] = invite_event
 
         # Check that the module understands a revocation of the invite as such, and not as
         # a new invite.
         invite_event = self._new_3pid_invite(
-            self.room_creator, self.direct_room, {},
+            self.room_creator,
+            self.direct_room,
+            {},
         )
 
         allowed, _ = await self.module.check_event_allowed(
@@ -554,13 +590,18 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
 
         self.assertTrue(allowed)
 
-        state_events[(EventTypes.ThirdPartyInvite, invite_event.state_key)] = invite_event
+        state_events[
+            (EventTypes.ThirdPartyInvite, invite_event.state_key)
+        ] = invite_event
 
         # Check that the revoked invite is ignored when processing a new invite - if it
         # isn't then the module would reject it since it would think we're trying to send
         # a second invite in a DM, which is forbidden.
         invite_event = self._new_3pid_invite(
-            self.room_creator, self.direct_room, invite_content, "someothertoken",
+            self.room_creator,
+            self.direct_room,
+            invite_content,
+            "someothertoken",
         )
 
         allowed, _ = await self.module.check_event_allowed(
@@ -590,12 +631,12 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         )
 
         state_events = self.restricted_room_state.copy()
-        state_events[(EventTypes.Member, self.forbidden_invitee)] = (
-            self._new_membership_event(
-                self.room_creator,
-                self.forbidden_invitee,
-                Membership.INVITE,
-            )
+        state_events[
+            (EventTypes.Member, self.forbidden_invitee)
+        ] = self._new_membership_event(
+            self.room_creator,
+            self.forbidden_invitee,
+            Membership.INVITE,
         )
 
         # Check that a forbidden user cannot join a restricted room, even with an invite.
@@ -604,30 +645,33 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
 
         # Check that an allowed user can join a restricted room, even without an invite.
         allowed, _ = await self.module.check_event_allowed(
-            event=allowed_join, state_events=self.restricted_room_state,
+            event=allowed_join,
+            state_events=self.restricted_room_state,
         )
         self.assertTrue(allowed)
 
         # Check that a forbidden user cannot join an unrestricted room if they haven't
         # been invited into it.
         allowed, _ = await self.module.check_event_allowed(
-            event=forbidden_join, state_events=self.unrestricted_room_state,
+            event=forbidden_join,
+            state_events=self.unrestricted_room_state,
         )
         self.assertFalse(allowed)
 
         state_events = self.unrestricted_room_state.copy()
-        state_events[(EventTypes.Member, self.forbidden_invitee)] = (
-            self._new_membership_event(
-                self.room_creator,
-                self.forbidden_invitee,
-                Membership.INVITE,
-            )
+        state_events[
+            (EventTypes.Member, self.forbidden_invitee)
+        ] = self._new_membership_event(
+            self.room_creator,
+            self.forbidden_invitee,
+            Membership.INVITE,
         )
 
         # Check that a forbidden user can join an unrestricted room if they have been
         # invited into it.
         allowed, _ = await self.module.check_event_allowed(
-            event=forbidden_join, state_events=state_events,
+            event=forbidden_join,
+            state_events=state_events,
         )
         self.assertTrue(allowed)
 
@@ -661,7 +705,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         sender: str,
         room_id: str,
         content: Optional[dict] = None,
-        token: str = "sometoken"
+        token: str = "sometoken",
     ) -> MockEvent:
         return MockEvent(
             sender=sender,
@@ -689,4 +733,3 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             state_events=self.direct_room_state,
         )
         self.assertFalse(allowed)
-

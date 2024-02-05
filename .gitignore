@@ -12,3 +12,4 @@ _trial_temp/
 /build/
 /dist/
 /*.egg-info/
+/.venv/

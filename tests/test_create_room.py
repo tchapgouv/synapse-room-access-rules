@@ -12,14 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, Optional
 
 import aiounittest
-
 from synapse.module_api.errors import SynapseError
 
 from room_access_rules import ACCESS_RULES_TYPE, AccessRules, EventTypes
-from tests import create_module, MockRequester
+from tests import MockRequester, create_module
 
 
 class RoomCreateTestCase(aiounittest.AsyncTestCase):
@@ -55,14 +54,14 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
         """Tests that creating a room with an invalid rule for the creation configuration
         raises an exception.
         """
-        with self.assertRaises(SynapseError) as cm:
+        with self.assertRaises(SynapseError):
             await self._create_room(direct=False, rule=AccessRules.DIRECT)
 
     async def test_create_room_direct_invalid_rule(self):
         """Tests that creating a DM with an invalid rule for the creation configuration
         raises an exception.
         """
-        with self.assertRaises(SynapseError) as cm:
+        with self.assertRaises(SynapseError):
             await self._create_room(direct=True, rule=AccessRules.RESTRICTED)
 
     async def test_create_room_default_power_level_rules(self):
@@ -102,7 +101,10 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
         with self.assertRaises(SynapseError):
             await self._create_room(
                 initial_state=[
-                    {"type": "m.room.power_levels", "content": pl_override_state_default}
+                    {
+                        "type": "m.room.power_levels",
+                        "content": pl_override_state_default,
+                    }
                 ],
             )
 
@@ -175,7 +177,7 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
                     "state_key": "",
                     "content": {
                         "rule": rule,
-                    }
+                    },
                 }
             ],
         }
@@ -194,7 +196,9 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
 
         return config
 
-    async def _create_room_and_check_rule(self, expected_rule: str, direct: bool = False):
+    async def _create_room_and_check_rule(
+        self, expected_rule: str, direct: bool = False
+    ):
         config = await self._create_room(direct=direct, rule=expected_rule)
 
         self.assertIsInstance(config["initial_state"], list)

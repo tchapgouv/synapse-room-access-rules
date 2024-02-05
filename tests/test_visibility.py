@@ -16,7 +16,7 @@ from typing import Optional
 import aiounittest
 
 from room_access_rules import ACCESS_RULES_TYPE, AccessRules
-from tests import create_module, PUBLIC_ROOM_ID, new_access_rules_event
+from tests import PUBLIC_ROOM_ID, create_module, new_access_rules_event
 
 
 class RoomVisibilityTestCase(aiounittest.AsyncTestCase):
@@ -30,14 +30,18 @@ class RoomVisibilityTestCase(aiounittest.AsyncTestCase):
         """
         state = {
             (ACCESS_RULES_TYPE, ""): new_access_rules_event(
-                self.user_id, PUBLIC_ROOM_ID, AccessRules.RESTRICTED,
+                self.user_id,
+                PUBLIC_ROOM_ID,
+                AccessRules.RESTRICTED,
             )
         }
 
         # Check that we can't change the rule to 'unrestricted'.
         allowed, _ = await self.module.check_event_allowed(
             event=new_access_rules_event(
-                self.user_id, PUBLIC_ROOM_ID, AccessRules.UNRESTRICTED,
+                self.user_id,
+                PUBLIC_ROOM_ID,
+                AccessRules.UNRESTRICTED,
             ),
             state_events=state,
         )
@@ -47,7 +51,9 @@ class RoomVisibilityTestCase(aiounittest.AsyncTestCase):
         # Check that we can't change the rule to 'direct'.
         allowed, _ = await self.module.check_event_allowed(
             event=new_access_rules_event(
-                self.user_id, PUBLIC_ROOM_ID, AccessRules.DIRECT,
+                self.user_id,
+                PUBLIC_ROOM_ID,
+                AccessRules.DIRECT,
             ),
             state_events=state,
         )
@@ -57,31 +63,37 @@ class RoomVisibilityTestCase(aiounittest.AsyncTestCase):
     async def test_change_visibility_direct(self):
         """Tests that direct rooms can't be published to the room directory."""
         await self._test_change_visibility_to_public(
-            rule=AccessRules.DIRECT, expect_allowed=False,
+            rule=AccessRules.DIRECT,
+            expect_allowed=False,
         )
 
     async def test_change_visibility_restricted(self):
         """Tests that restricted rooms can be published to the room directory."""
         await self._test_change_visibility_to_public(
-            rule=AccessRules.RESTRICTED, expect_allowed=True,
+            rule=AccessRules.RESTRICTED,
+            expect_allowed=True,
         )
 
     async def test_change_visibility_unrestricted(self):
         """Tests that unrestricted rooms can't be published to the room directory."""
         await self._test_change_visibility_to_public(
-            rule=AccessRules.UNRESTRICTED, expect_allowed=False,
+            rule=AccessRules.UNRESTRICTED,
+            expect_allowed=False,
         )
 
     async def test_change_visibility_no_rule(self):
         """Tests that rooms without a rule can be published to the room directory, since
-         their rooms are assumed to be 'restricted'.
-         """
+        their rooms are assumed to be 'restricted'.
+        """
         await self._test_change_visibility_to_public(
-            rule=None, expect_allowed=True,
+            rule=None,
+            expect_allowed=True,
         )
 
     async def _test_change_visibility_to_public(
-        self, rule: Optional[str], expect_allowed: bool,
+        self,
+        rule: Optional[str],
+        expect_allowed: bool,
     ):
         """Test if a room with the given rule can be published to the server's room
         directory.
@@ -96,10 +108,14 @@ class RoomVisibilityTestCase(aiounittest.AsyncTestCase):
         state = {}
         if rule is not None:
             state[(ACCESS_RULES_TYPE, "")] = new_access_rules_event(
-                self.user_id, room_id, rule,
+                self.user_id,
+                room_id,
+                rule,
             )
 
         self.assertEqual(
-            await self.module.check_visibility_can_be_modified(room_id, state, "public"),
+            await self.module.check_visibility_can_be_modified(
+                room_id, state, "public"
+            ),
             expect_allowed,
         )
