@@ -361,6 +361,9 @@ class RoomAccessRules(object):
             if event.type == EventTypes.Topic:
                 return self._on_room_topic_change(event, rule), None
 
+            if event.type == EventTypes.RoomEncryption:
+                return self._on_room_encryption_change(event, state_events), None
+
         return True, None
 
     async def check_visibility_can_be_modified(
@@ -713,6 +716,23 @@ class RoomAccessRules(object):
             True if the event can be allowed, False otherwise.
         """
         return rule != AccessRules.DIRECT
+
+    def _on_room_encryption_change(
+        self, event: EventBase, state_events: StateMap[EventBase]
+    ) -> bool:
+        """Check whether a room can have its encryption enabled.
+        The current rule is to forbid such a change in public rooms.
+
+        Args:
+            event: The event to check.
+            state_events: A dict mapping (event type, state key) to state event.
+
+        Returns:
+            True if the event can be allowed, False otherwise.
+        """
+        if self._get_join_rule_from_state(state_events) == JoinRules.PUBLIC:
+            return False
+        return True
 
     @staticmethod
     def _get_rule_from_state(state_events: StateMap[EventBase]) -> str:
