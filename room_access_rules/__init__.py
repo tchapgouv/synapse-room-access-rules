@@ -84,7 +84,7 @@ class RoomAccessRules(object):
         )
 
     @staticmethod
-    def parse_config(config_dict: Dict) -> RoomAccessRulesConfig:
+    def parse_config(config_dict: Dict[str, Any]) -> RoomAccessRulesConfig:
         """Parses and validates the options specified in the homeserver config.
 
         Args:
@@ -106,7 +106,7 @@ class RoomAccessRules(object):
     async def on_create_room(
         self,
         requester: Requester,
-        config: Dict,
+        config: Dict[str, Any],
         is_requester_admin: bool,
     ) -> bool:
         """Checks if a im.vector.room.access_rules event is being set during room
@@ -232,7 +232,7 @@ class RoomAccessRules(object):
     #
     # The same power levels are currently applied regardless of room preset.
     @staticmethod
-    def _get_default_power_levels(user_id: str) -> Dict:
+    def _get_default_power_levels(user_id: str) -> Dict[str, Any]:
         return {
             "users": {user_id: 100},
             "users_default": 0,
@@ -589,9 +589,9 @@ class RoomAccessRules(object):
 
     def _is_power_level_content_allowed(
         self,
-        content: Dict,
+        content: Dict[str, Any],
         access_rule: str,
-        default_power_levels: Optional[Dict] = None,
+        default_power_levels: Optional[Dict[str, Any]] = None,
         on_room_creation: bool = True,
     ) -> bool:
         """Check if a given power levels event is permitted under the given access rule.
@@ -616,7 +616,7 @@ class RoomAccessRules(object):
         # We want to allow admins to modify or fix the power levels in a room if they
         # have a special circumstance, but still want to encourage a certain pattern
         # during room creation.
-        if on_room_creation:
+        if on_room_creation and default_power_levels:
             # We specifically don't fail if "invite" or "state_default" are None, as those
             # values should be replaced with our "default" power level values anyways,
             # which are compliant
@@ -785,7 +785,7 @@ class RoomAccessRules(object):
         Returns:
             Whether the invite is due to the given 3PID invite.
         """
-        token = (
+        token: str = (
             invite.content.get("third_party_invite", {})
             .get("signed", {})
             .get("token", "")

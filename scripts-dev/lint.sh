@@ -16,4 +16,4 @@ set -x
 
 black "${files[@]}"
 ruff --fix "${files[@]}"
-mypy "${files[@]}"
+mypy room_access_rules
