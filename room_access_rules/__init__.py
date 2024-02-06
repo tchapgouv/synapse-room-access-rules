@@ -350,7 +350,7 @@ class RoomAccessRules(object):
                 )
 
             if event.type == EventTypes.JoinRules:
-                return self._on_join_rule_change(event, rule), None
+                return self._on_join_rule_change(event, rule, state_events), None
 
             if event.type == EventTypes.RoomAvatar:
                 return self._on_room_avatar_change(event, rule), None
@@ -657,7 +657,9 @@ class RoomAccessRules(object):
 
         return True
 
-    def _on_join_rule_change(self, event: EventBase, rule: str) -> bool:
+    def _on_join_rule_change(
+        self, event: EventBase, rule: str, state_events: StateMap[EventBase]
+    ) -> bool:
         """Check whether a join rule change is allowed.
 
         A join rule change is always allowed unless the new join rule is "public" and
@@ -672,6 +674,9 @@ class RoomAccessRules(object):
         """
         if event.content.get("join_rule") == JoinRules.PUBLIC:
             return rule != AccessRules.DIRECT
+
+        if self._get_join_rule_from_state(state_events) == JoinRules.PUBLIC:
+            return False
 
         return True
 

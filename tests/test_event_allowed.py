@@ -611,6 +611,28 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
 
         self.assertTrue(allowed)
 
+    async def test_forbid_join_rule_change_public_room(self):
+        """Tests that the join_rule of a public room can't be changed."""
+        state_events = self.restricted_room_state.copy()
+        state_events[(EventTypes.JoinRules, "")] = MockEvent(
+            sender=self.room_creator,
+            type=EventTypes.JoinRules,
+            content={"join_rule": JoinRules.PUBLIC},
+            state_key="",
+        )
+
+        allowed, _ = await self.module.check_event_allowed(
+            event=MockEvent(
+                sender=self.room_creator,
+                type=EventTypes.JoinRules,
+                content={"join_rule": JoinRules.PRIVATE},
+                state_key="",
+            ),
+            state_events=state_events,
+        )
+
+        self.assertFalse(allowed)
+
     async def test_forbid_encryption_public_room(self):
         """Tests that a public room can't have its encryption enabled."""
         state_events = self.restricted_room_state.copy()
