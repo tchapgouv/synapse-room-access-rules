@@ -192,6 +192,11 @@ class RoomAccessRules(object):
             requester.user.to_string()
         )
 
+        # This preset should put all invitees as admin, so do it
+        if preset == RoomCreationPreset.TRUSTED_PRIVATE_CHAT:
+            for invitee in config.get("invite", []):
+                default_power_levels["users"][invitee] = 100
+
         # Check if the creator can override values for the power levels.
         allowed = self._is_power_level_content_allowed(
             config.get("power_level_content_override", {}),
