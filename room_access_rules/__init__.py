@@ -27,6 +27,9 @@ logger = logging.getLogger(__name__)
 
 ACCESS_RULES_TYPE = "im.vector.room.access_rules"
 
+LOCATION_LIVE_SHARING_EVENT_TYPE = "m.beacon_info"
+LOCATION_LIVE_SHARING_MSC_EVENT_TYPE = "org.matrix.msc3672.beacon_info"
+
 
 class AccessRules:
     DIRECT = "direct"
@@ -245,6 +248,9 @@ class RoomAccessRules(object):
                 EventTypes.Tombstone: 100,
                 EventTypes.ServerACL: 100,
                 EventTypes.RoomEncryption: 100,
+                # We want normal users to be able to use live location sharing by default
+                LOCATION_LIVE_SHARING_EVENT_TYPE: 0,
+                LOCATION_LIVE_SHARING_MSC_EVENT_TYPE: 0,
             },
             "events_default": 0,
             "state_default": 100,  # Admins should be the only ones to perform other tasks
