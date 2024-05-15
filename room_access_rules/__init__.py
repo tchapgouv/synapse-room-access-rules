@@ -189,8 +189,6 @@ class RoomAccessRules(object):
         return TaskStatus.COMPLETE, None, None
 
     async def fix_room_power_levels(self, room_id: str) -> None:
-        logger.info(f"Fixing power levels of room {room_id}")
-
         # Fetch local users joined to the room
         local_joined_users = set()
         for user_id, membership in await self.store.get_local_users_related_to_room(
@@ -253,6 +251,7 @@ class RoomAccessRules(object):
 
             # Send the updated pl event to the room with a local admin
             if changed:
+                logger.info(f"Fixing power levels of room {room_id}")
                 await self.module_api.create_and_send_event_into_room(
                     {
                         "room_id": room_id,
