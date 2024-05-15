@@ -18,7 +18,7 @@ dependencies = [
 dev = [
   # for tests
   "pydantic >= 1.7.4, < 2.0",
-  "matrix-synapse == 1.98.0",
+  "matrix-synapse == 1.103.0",
   "tox",
   "twisted",
   "aiounittest",

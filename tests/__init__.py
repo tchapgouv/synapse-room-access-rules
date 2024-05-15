@@ -60,6 +60,14 @@ class MockEvent:
         return self.content["membership"]
 
 
+class MockHomeserver:
+    def get_datastores(self):
+        return Mock(spec=["main"])
+
+    def get_task_scheduler(self):
+        return Mock(spec=["register_action"])
+
+
 def new_access_rules_event(sender: str, room_id: str, rule: str) -> MockEvent:
     return MockEvent(
         sender=sender,
@@ -78,6 +86,7 @@ def create_module(
     module_api = Mock(spec=ModuleApi)
     module_api.http_client = MockHttpClient()
     module_api.public_room_list_manager = MockPublicRoomListManager()
+    module_api._hs = MockHomeserver()
 
     if config_override is None:
         config_override = {}
