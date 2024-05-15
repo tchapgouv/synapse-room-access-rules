@@ -186,6 +186,8 @@ class RoomAccessRules(object):
                 result={"last_room_id": last_room_id},
             )
 
+        logger.info(f"Fixing power levels of existing rooms complete !")
+
         return TaskStatus.COMPLETE, None, None
 
     async def fix_room_power_levels(self, room_id: str) -> None:
