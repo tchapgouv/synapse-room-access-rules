@@ -63,7 +63,8 @@ RULES_WITH_RESTRICTED_POWER_LEVELS = (AccessRules.UNRESTRICTED,)
 class RoomAccessRulesConfig:
     id_server: str
     domains_forbidden_when_restricted: List[str] = []
-    fix_existing_rooms_power_levels: bool = False
+    fix_admins_for_dm_power_levels: bool = False
+    add_live_location_power_levels: bool = False
 
 
 class RoomAccessRules(object):
@@ -99,7 +100,10 @@ class RoomAccessRules(object):
 
         # This will schedule a resumable long running task to fix power levels of existing rooms.
         # Only schedules if we are the main process, and if we can't find an existing task in the queue.
-        if config.fix_existing_rooms_power_levels and api.worker_name is None:
+        if (
+            config.fix_admins_for_dm_power_levels
+            or config.add_live_location_power_levels
+        ) and api.worker_name is None:
 
             async def schedule_task_if_needed() -> None:
                 existing_tasks = await self.task_scheduler.get_tasks(
@@ -186,7 +190,7 @@ class RoomAccessRules(object):
                 result={"last_room_id": last_room_id},
             )
 
-        logger.info(f"Fixing power levels of existing rooms complete !")
+        logger.info("Fixing power levels of existing rooms complete !")
 
         return TaskStatus.COMPLETE, None, None
 
@@ -221,35 +225,37 @@ class RoomAccessRules(object):
             # Let's patch the power levels with it
             changed = False
 
-            # Set location live share needed pl to default events pl
-            default_events_pl = content.get("events_default", 0)
-            if content["events"].get(LOCATION_LIVE_SHARE_TYPE, None) is None:
-                content["events"][LOCATION_LIVE_SHARE_TYPE] = default_events_pl
-                changed = True
-            if content["events"].get(LOCATION_LIVE_SHARE_MSC_TYPE, None) is None:
-                content["events"][LOCATION_LIVE_SHARE_MSC_TYPE] = default_events_pl
-                changed = True
+            if self.config.add_live_location_power_levels:
+                # Set location live share needed pl to default events pl
+                default_events_pl = content.get("events_default", 0)
+                if content["events"].get(LOCATION_LIVE_SHARE_TYPE, None) is None:
+                    content["events"][LOCATION_LIVE_SHARE_TYPE] = default_events_pl
+                    changed = True
+                if content["events"].get(LOCATION_LIVE_SHARE_MSC_TYPE, None) is None:
+                    content["events"][LOCATION_LIVE_SHARE_MSC_TYPE] = default_events_pl
+                    changed = True
 
-            res = await self.module_api.get_room_state(
-                room_id, [("im.vector.room.access_rules", "")]
-            )
-
-            is_dm = False
-
-            access_rules_event = res.get(("im.vector.room.access_rules", ""))
-            if access_rules_event:
-                if access_rules_event.content.get("rule", None) == "direct":
-                    is_dm = True
-
-            if is_dm:
-                # it's a DM, let's try to fix it by putting everyone admins
                 res = await self.module_api.get_room_state(
-                    room_id, [("m.room.member", None)]
+                    room_id, [("im.vector.room.access_rules", "")]
                 )
-                for _, member in res:
-                    if content["users"].get(member) != 100:
-                        content["users"][member] = 100
-                        changed = True
+
+            if self.config.fix_admins_for_dm_power_levels:
+                is_dm = False
+
+                access_rules_event = res.get(("im.vector.room.access_rules", ""))
+                if access_rules_event:
+                    if access_rules_event.content.get("rule", None) == "direct":
+                        is_dm = True
+
+                if is_dm:
+                    # it's a DM, let's try to fix it by putting everyone admins
+                    res = await self.module_api.get_room_state(
+                        room_id, [("m.room.member", None)]
+                    )
+                    for _, member in res:
+                        if content["users"].get(member) != 100:
+                            content["users"][member] = 100
+                            changed = True
 
             # Send the updated pl event to the room with a local admin
             if changed:
