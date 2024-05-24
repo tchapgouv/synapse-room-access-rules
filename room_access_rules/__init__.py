@@ -169,7 +169,7 @@ class RoomAccessRules(object):
             room_ids = await self.module_api.run_db_interaction(
                 "get_room_ids_from",
                 get_room_ids_from,
-                limit=100,
+                limit=50,
                 from_id=last_room_id,
             )
 
@@ -260,15 +260,21 @@ class RoomAccessRules(object):
             # Send the updated pl event to the room with a local admin
             if changed:
                 logger.info(f"Fixing power levels of room {room_id}")
-                await self.module_api.create_and_send_event_into_room(
-                    {
-                        "room_id": room_id,
-                        "type": "m.room.power_levels",
-                        "state_key": "",
-                        "sender": admin_user,
-                        "content": content,
-                    }
-                )
+                try:
+                    await self.module_api.create_and_send_event_into_room(
+                        {
+                            "room_id": room_id,
+                            "type": "m.room.power_levels",
+                            "state_key": "",
+                            "sender": admin_user,
+                            "content": content,
+                        }
+                    )
+                except SynapseError as e:
+                    logger.info(
+                        f"Not possible to change power levels of room {room_id}, {str(e)}"
+                    )
+                    logger.debug(content)
 
     async def on_create_room(
         self,
