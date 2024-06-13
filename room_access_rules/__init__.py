@@ -62,6 +62,7 @@ RULES_WITH_RESTRICTED_POWER_LEVELS = (AccessRules.UNRESTRICTED,)
 @attr.s(frozen=True, auto_attribs=True)
 class RoomAccessRulesConfig:
     id_server: str
+    bypass_for_users: List[str] = []
     domains_forbidden_when_restricted: List[str] = []
     fix_admins_for_dm_power_levels: bool = False
     add_live_location_power_levels: bool = False
@@ -306,6 +307,12 @@ class RoomAccessRules(object):
         access_rule = None
         join_rule = None
 
+        if (
+            is_requester_admin
+            or requester.user.to_string() in self.config.bypass_for_users
+        ):
+            return True
+
         # If there's a rules event in the initial state, check if it complies with the
         # spec for im.vector.room.access_rules and deny the request if not.
         for event in config.get("initial_state", []):
@@ -486,6 +493,14 @@ class RoomAccessRules(object):
 
         return True
 
+    async def _user_can_bypass_rules(self, user_id: str) -> bool:
+        if (
+            user_id in self.config.bypass_for_users
+            or await self.module_api.is_user_admin(user_id)
+        ):
+            return True
+        return False
+
     async def check_event_allowed(
         self,
         event: EventBase,
@@ -504,6 +519,9 @@ class RoomAccessRules(object):
             allowed, False if it should be rejected. The second entry is always
             None because this module doesn't replace event contents.
         """
+        if await self._user_can_bypass_rules(event.sender):
+            return True, None
+
         # We check the rules when altering the state of the room, so only go further if
         # the event is a state event.
         if event.is_state():
@@ -643,6 +661,18 @@ class RoomAccessRules(object):
         Returns:
             A boolean indicating whether the event is allowed.
         """
+
+        # Let's ignore rules if the user is accepting an invite coming from
+        # an user in the bypass list or an admin
+        if event.type == EventTypes.Member and event.membership == Membership.JOIN:
+            previous_membership = state_events.get((EventTypes.Member, event.state_key))
+            if (
+                previous_membership
+                and previous_membership.membership == Membership.INVITE
+            ):
+                if await self._user_can_bypass_rules(previous_membership.sender):
+                    return True
+
         if rule == AccessRules.RESTRICTED:
             ret = self._on_membership_or_invite_restricted(event)
         elif rule == AccessRules.UNRESTRICTED:
