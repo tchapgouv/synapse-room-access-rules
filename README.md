@@ -93,6 +93,8 @@ modules:
         # Identity server to use when checking the homeserver an email address belongs to
         # using the /info endpoint. Required.
         id_server: "vector.im"
+        # Disable access rules for this list of users
+        bypass_for_users: []
 ```
 
 ## Development and Testing
