@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import Any, Dict, Optional
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import attr
 from synapse.module_api import ModuleApi, UserID
@@ -87,6 +87,7 @@ def create_module(
     module_api.http_client = MockHttpClient()
     module_api.public_room_list_manager = MockPublicRoomListManager()
     module_api._hs = MockHomeserver()
+    module_api.is_user_admin = AsyncMock(return_value=False)
 
     if config_override is None:
         config_override = {}
