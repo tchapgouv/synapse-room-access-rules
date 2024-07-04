@@ -673,6 +673,14 @@ class RoomAccessRules(object):
                 if await self._user_can_bypass_rules(previous_membership.sender):
                     return True
 
+        # Let's ignore rules if the invited user is in the bypass list or an admin
+        if (
+            event.type == EventTypes.Member
+            and event.membership == Membership.INVITE
+            and await self._user_can_bypass_rules(event.state_key)
+        ):
+            return True
+
         if rule == AccessRules.RESTRICTED:
             ret = self._on_membership_or_invite_restricted(event)
         elif rule == AccessRules.UNRESTRICTED:
