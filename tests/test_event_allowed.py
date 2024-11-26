@@ -48,6 +48,13 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
                 content=self.module._get_default_power_levels(self.room_creator),
                 room_id=self.direct_room,
             ),
+            (EventTypes.JoinRules, ""): MockEvent(
+                sender=self.room_creator,
+                type=EventTypes.JoinRules,
+                state_key="",
+                content={"join_rule": JoinRules.PRIVATE},
+                room_id=self.direct_room,
+            ),
             (ACCESS_RULES_TYPE, ""): MockEvent(
                 sender=self.room_creator,
                 type=ACCESS_RULES_TYPE,
@@ -80,6 +87,13 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
                 content=self.module._get_default_power_levels(self.room_creator),
                 room_id=self.unrestricted_room,
             ),
+            (EventTypes.JoinRules, ""): MockEvent(
+                sender=self.room_creator,
+                type=EventTypes.JoinRules,
+                state_key="",
+                content={"join_rule": JoinRules.PUBLIC},
+                room_id=self.unrestricted_room,
+            ),
             (ACCESS_RULES_TYPE, ""): MockEvent(
                 sender=self.room_creator,
                 type=ACCESS_RULES_TYPE,
@@ -103,6 +117,13 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
                 type=EventTypes.PowerLevels,
                 state_key="",
                 content=self.module._get_default_power_levels(self.room_creator),
+                room_id=self.restricted_room,
+            ),
+            (EventTypes.JoinRules, ""): MockEvent(
+                sender=self.room_creator,
+                type=EventTypes.JoinRules,
+                state_key="",
+                content={"join_rule": JoinRules.PRIVATE},
                 room_id=self.restricted_room,
             ),
             (ACCESS_RULES_TYPE, ""): MockEvent(
@@ -728,6 +749,39 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
                 state_key="",
             )
         )
+
+        # the existing join rule is "public" and the room is not encrypted
+        allowed, _ = await self.module.check_event_allowed(
+            event=MockEvent(
+                sender=self.room_creator,
+                type=EventTypes.JoinRules,
+                content={"join_rule": JoinRules.PRIVATE},
+                state_key="",
+            ),
+            state_events=self.unrestricted_room_state,
+        )
+        self.assertFalse(allowed)
+
+        # the existing join rule is "public" and the room is encrypted
+        allowed, _ = await self.module.check_event_allowed(
+            event=MockEvent(
+                sender=self.room_creator,
+                type=EventTypes.JoinRules,
+                content={"join_rule": JoinRules.PRIVATE},
+                state_key="",
+            ),
+            state_events=self.unrestricted_room_state
+            | {
+                (EventTypes.RoomEncryption, ""): MockEvent(
+                    sender=self.room_creator,
+                    type=EventTypes.RoomEncryption,
+                    state_key="",
+                    content={"algorithm": "m.megolm.v1.aes-sha2"},
+                    room_id=self.unrestricted_room,
+                )
+            },
+        )
+        self.assertTrue(allowed)
 
     def _new_membership_event(
         self,

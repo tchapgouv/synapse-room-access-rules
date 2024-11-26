@@ -881,8 +881,9 @@ class RoomAccessRules(object):
     ) -> bool:
         """Check whether a join rule change is allowed.
 
-        A join rule change is always allowed unless the new join rule is "public" and
-        the current access rule is "direct".
+        A join rule change is always allowed unless:
+        - the new join rule is "public" and the current access rule is "direct"
+        - the existing join rule is "public" and the room is not encrypted
 
         Args:
             event: The event to check.
@@ -894,8 +895,12 @@ class RoomAccessRules(object):
         if event.content.get("join_rule") == JoinRules.PUBLIC:
             return rule != AccessRules.DIRECT
 
-        if self._get_join_rule_from_state(state_events) == JoinRules.PUBLIC:
-            return False
+        if (
+            self._get_join_rule_from_state(state_events) == JoinRules.PUBLIC
+            and event.content.get("join_rule") != JoinRules.PUBLIC
+        ):
+            if not state_events.get((EventTypes.RoomEncryption, "")):
+                return False
 
         return True
 
