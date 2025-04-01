@@ -236,9 +236,9 @@ class RoomAccessRules(object):
                     content["events"][LOCATION_LIVE_SHARE_MSC_TYPE] = default_events_pl
                     changed = True
 
-                res = await self.module_api.get_room_state(
-                    room_id, [("im.vector.room.access_rules", "")]
-                )
+            res = await self.module_api.get_room_state(
+                room_id, [("im.vector.room.access_rules", "")]
+            )
 
             if self.config.fix_admins_for_dm_power_levels:
                 is_dm = False
