@@ -205,10 +205,10 @@ class RoomAccessRules(object):
                 local_joined_users.add(user_id)
 
         # Fetch current power levels event and check if we have a local admin
-        res = await self.module_api.get_room_state(
+        power_levels_state = await self.module_api.get_room_state(
             room_id, [("m.room.power_levels", "")]
         )
-        power_levels_event = res.get(("m.room.power_levels", ""))
+        power_levels_event = power_levels_state.get(("m.room.power_levels", ""))
         if power_levels_event and power_levels_event.content:
             content = copy.deepcopy(power_levels_event.content)
 
@@ -236,24 +236,25 @@ class RoomAccessRules(object):
                     content["events"][LOCATION_LIVE_SHARE_MSC_TYPE] = default_events_pl
                     changed = True
 
-            res = await self.module_api.get_room_state(
-                room_id, [("im.vector.room.access_rules", "")]
-            )
-
             if self.config.fix_admins_for_dm_power_levels:
                 is_dm = False
 
-                access_rules_event = res.get(("im.vector.room.access_rules", ""))
+                access_rules_state = await self.module_api.get_room_state(
+                    room_id, [("im.vector.room.access_rules", "")]
+                )
+                access_rules_event = access_rules_state.get(
+                    ("im.vector.room.access_rules", "")
+                )
                 if access_rules_event:
                     if access_rules_event.content.get("rule", None) == "direct":
                         is_dm = True
 
                 if is_dm:
                     # it's a DM, let's try to fix it by putting everyone admins
-                    res = await self.module_api.get_room_state(
+                    members_state = await self.module_api.get_room_state(
                         room_id, [("m.room.member", None)]
                     )
-                    for _, member in res:
+                    for _, member in members_state:
                         if content["users"].get(member) != 100:
                             content["users"][member] = 100
                             changed = True
