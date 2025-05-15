@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 import email.utils
 import logging
 from typing import Any, Dict, List, Optional, Tuple
@@ -24,6 +23,7 @@ from synapse.module_api import ModuleApi, UserID
 from synapse.module_api.errors import ConfigError, SynapseError
 from synapse.storage.database import LoggingTransaction
 from synapse.types import JsonMapping, Requester, ScheduledTask, StateMap, TaskStatus
+from synapse.util.frozenutils import unfreeze
 
 logger = logging.getLogger(__name__)
 
@@ -210,7 +210,7 @@ class RoomAccessRules(object):
         )
         power_levels_event = power_levels_state.get(("m.room.power_levels", ""))
         if power_levels_event and power_levels_event.content:
-            content = copy.deepcopy(power_levels_event.content)
+            content = unfreeze(power_levels_event.content)
 
             admin_user = None
             content.setdefault("users", {})
