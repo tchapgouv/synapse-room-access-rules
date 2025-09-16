@@ -248,7 +248,9 @@ class RoomAccessRules(object):
                     content["events"][MATRIX_RTC_CALL_MEMBER_TYPE] = default_events_pl
                     changed = True
                 if content["events"].get(MATRIX_RTC_CALL_MEMBER_MSC_TYPE, None) is None:
-                    content["events"][MATRIX_RTC_CALL_MEMBER_MSC_TYPE] = default_events_pl
+                    content["events"][
+                        MATRIX_RTC_CALL_MEMBER_MSC_TYPE
+                    ] = default_events_pl
                     changed = True
 
             if self.config.fix_admins_for_dm_power_levels:
@@ -438,8 +440,7 @@ class RoomAccessRules(object):
         for key, value in default_power_levels.items():
             if isinstance(value, dict):
                 RoomAccessRules._fill_power_levels(
-                    custom_user_power_levels.setdefault(key, {}),
-                    value
+                    custom_user_power_levels.setdefault(key, {}), value
                 )
             else:
                 custom_user_power_levels.setdefault(key, value)
