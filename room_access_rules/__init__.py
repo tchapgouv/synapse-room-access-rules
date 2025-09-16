@@ -32,6 +32,9 @@ ACCESS_RULES_TYPE = "im.vector.room.access_rules"
 LOCATION_LIVE_SHARE_TYPE = "m.beacon_info"
 LOCATION_LIVE_SHARE_MSC_TYPE = "org.matrix.msc3672.beacon_info"
 
+MATRIX_RTC_CALL_MEMBER_TYPE = "m.call.member"
+MATRIX_RTC_CALL_MEMBER_MSC_TYPE = "org.matrix.msc3401.call.member"
+
 
 class AccessRules:
     DIRECT = "direct"
@@ -66,6 +69,7 @@ class RoomAccessRulesConfig:
     domains_forbidden_when_restricted: List[str] = []
     fix_admins_for_dm_power_levels: bool = False
     add_live_location_power_levels: bool = False
+    add_matrix_rtc_call_power_levels: bool = False
 
 
 class RoomAccessRules(object):
@@ -104,6 +108,7 @@ class RoomAccessRules(object):
         if (
             config.fix_admins_for_dm_power_levels
             or config.add_live_location_power_levels
+            or config.add_matrix_rtc_call_power_levels
         ) and api.worker_name is None:
 
             async def schedule_task_if_needed() -> None:
@@ -234,6 +239,16 @@ class RoomAccessRules(object):
                     changed = True
                 if content["events"].get(LOCATION_LIVE_SHARE_MSC_TYPE, None) is None:
                     content["events"][LOCATION_LIVE_SHARE_MSC_TYPE] = default_events_pl
+                    changed = True
+
+            if self.config.add_matrix_rtc_call_power_levels:
+                # Set Matrix RTC Call needed pl to default events pl
+                default_events_pl = content.get("events_default", 0)
+                if content["events"].get(MATRIX_RTC_CALL_MEMBER_TYPE, None) is None:
+                    content["events"][MATRIX_RTC_CALL_MEMBER_TYPE] = default_events_pl
+                    changed = True
+                if content["events"].get(MATRIX_RTC_CALL_MEMBER_MSC_TYPE, None) is None:
+                    content["events"][MATRIX_RTC_CALL_MEMBER_MSC_TYPE] = default_events_pl
                     changed = True
 
             if self.config.fix_admins_for_dm_power_levels:
@@ -434,6 +449,9 @@ class RoomAccessRules(object):
                 # We want normal users to be able to use live location sharing by default
                 LOCATION_LIVE_SHARE_TYPE: 0,
                 LOCATION_LIVE_SHARE_MSC_TYPE: 0,
+                # We want normal users to be able to particpate in Matrix RTC calls by default
+                MATRIX_RTC_CALL_MEMBER_TYPE: 0,
+                MATRIX_RTC_CALL_MEMBER_MSC_TYPE: 0,
             },
             "events_default": 0,
             "state_default": 100,  # Admins should be the only ones to perform other tasks
