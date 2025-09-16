@@ -14,7 +14,7 @@
 # limitations under the License.
 import email.utils
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import attr
 from synapse.api.constants import EventTypes, JoinRules, Membership, RoomCreationPreset
@@ -419,14 +419,30 @@ class RoomAccessRules(object):
             # If the user is using their own power levels, but failed to provide an
             # expected key in the power levels content dictionary, fill it in from the
             # defaults instead
-            for key, value in default_power_levels.items():
-                custom_user_power_levels.setdefault(key, value)
+            self._fill_power_levels(custom_user_power_levels, default_power_levels)
         else:
             # If power levels were not overridden by the user, completely override with
             # the defaults instead
             config["power_level_content_override"] = default_power_levels
 
         return True
+
+    @staticmethod
+    def _fill_power_levels(
+        custom_user_power_levels: Dict[Any, Any],
+        default_power_levels: Mapping[Any, Any],
+    ) -> None:
+        """Recursively fill in missing keys in custom_user_power_levels from
+        default_power_levels.
+        """
+        for key, value in default_power_levels.items():
+            if isinstance(value, dict):
+                RoomAccessRules._fill_power_levels(
+                    custom_user_power_levels.setdefault(key, {}),
+                    value
+                )
+            else:
+                custom_user_power_levels.setdefault(key, value)
 
     # If power levels are not overridden by the user during room creation, the following
     # rules are used instead. Changes from Synapse's default power levels are noted.
