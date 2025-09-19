@@ -14,15 +14,16 @@
 # limitations under the License.
 import email.utils
 import logging
+from mimetypes import init
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import attr
 from synapse.api.constants import EventTypes, JoinRules, Membership, RoomCreationPreset
-from synapse.events import EventBase
+from synapse.events import EventBase, make_event_from_dict
 from synapse.module_api import ModuleApi, UserID
 from synapse.module_api.errors import ConfigError, SynapseError
 from synapse.storage.database import LoggingTransaction
-from synapse.types import JsonMapping, Requester, ScheduledTask, StateMap, TaskStatus
+from synapse.types import JsonMapping, MutableStateMap, Requester, ScheduledTask, StateMap, TaskStatus
 from synapse.util.frozenutils import unfreeze
 
 logger = logging.getLogger(__name__)
@@ -322,6 +323,7 @@ class RoomAccessRules(object):
         """
         is_direct = config.get("is_direct")
         preset = config.get("preset")
+        room_version = config.get("room_version")
         access_rule = None
         join_rule = None
 
@@ -331,51 +333,55 @@ class RoomAccessRules(object):
         ):
             return True
 
+        initial_state : MutableStateMap[EventBase] = {}
+        for event_dict in config.get("initial_state", []):
+            event = EventBase.from_dict(event_dict)
+            initial_state[(event.type, event.state_key)] = event
+
+        join_rule_event = initial_state.get((EventTypes.JoinRules, ""))
+        if join_rule_event:
+            join_rule = join_rule_event.content.get("join_rule")
+
+        encrypted_event = initial_state.get((EventTypes.RoomEncryption, ""))
+
         # If there's a rules event in the initial state, check if it complies with the
         # spec for im.vector.room.access_rules and deny the request if not.
-        for event in config.get("initial_state", []):
-            if event["type"] == ACCESS_RULES_TYPE:
-                access_rule = event["content"].get("rule")
 
-                # Make sure the event has a valid content.
-                if access_rule is None:
-                    raise SynapseError(400, "Invalid access rule")
+        access_rule_event = initial_state.get((ACCESS_RULES_TYPE, ""))
+        if access_rule_event:
+            access_rule = access_rule_event.content.get("rule")
 
-                # Make sure the rule name is valid.
-                if access_rule not in VALID_ACCESS_RULES:
-                    raise SynapseError(400, "Invalid access rule")
+            # Make sure the event has a valid content.
+            if access_rule is None:
+                raise SynapseError(400, "Invalid access rule")
 
-                if (is_direct and access_rule != AccessRules.DIRECT) or (
-                    access_rule == AccessRules.DIRECT and not is_direct
-                ):
-                    raise SynapseError(400, "Invalid access rule")
+            # Make sure the rule name is valid.
+            if access_rule not in VALID_ACCESS_RULES:
+                raise SynapseError(400, "Invalid access rule")
 
-            if event["type"] == EventTypes.JoinRules:
-                join_rule = event["content"].get("join_rule")
-
-        if access_rule is None:
+            if (is_direct and access_rule != AccessRules.DIRECT) or (
+                access_rule == AccessRules.DIRECT and not is_direct
+            ):
+                raise SynapseError(400, "Invalid access rule")
+        else:
             # If there's no access rules event in the initial state, create one with the
             # default setting.
             if is_direct:
-                default_rule = AccessRules.DIRECT
+                access_rule = AccessRules.DIRECT
             else:
                 # If the default value for non-direct chat changes, we should make another
                 # case here for rooms created with either a "public" join_rule or the
                 # "public_chat" preset to make sure those keep defaulting to "restricted"
-                default_rule = AccessRules.RESTRICTED
+                access_rule = AccessRules.RESTRICTED
 
-            if not config.get("initial_state"):
-                config["initial_state"] = []
-
-            config["initial_state"].append(
+            initial_state[(ACCESS_RULES_TYPE, "")] = make_event_from_dict(
                 {
                     "type": ACCESS_RULES_TYPE,
                     "state_key": "",
-                    "content": {"rule": default_rule},
-                }
+                    "content": {"rule": access_rule},
+                },
+                room_version,
             )
-
-            access_rule = default_rule
 
         # Check that the preset in use is compatible with the access rule, whether it's
         # user-defined or the default.
@@ -385,6 +391,23 @@ class RoomAccessRules(object):
             join_rule == JoinRules.PUBLIC or preset == RoomCreationPreset.PUBLIC_CHAT
         ) and access_rule == AccessRules.DIRECT:
             raise SynapseError(400, "Invalid access rule")
+
+        # Force encryption
+        # if (
+        #     access_rule == AccessRules.DIRECT
+        #     and preset == RoomCreationPreset.PRIVATE_CHAT
+        #     and encrypted_event is None
+        # ):
+        #     if not config.get("initial_state"):
+        #         config["initial_state"] = []
+
+        #     config["initial_state"].append(
+        #         {
+        #             "type": EventTypes.RoomEncryption,
+        #             "state_key": "",
+        #             "content": {"algorithm": "m.megolm.v1.aes-sha2"},
+        #         }
+        #     )
 
         default_power_levels = self._get_default_power_levels(
             requester.user.to_string()
@@ -919,6 +942,7 @@ class RoomAccessRules(object):
 
         A join rule change is always allowed unless:
         - the new join rule is "public" and the current access rule is "direct"
+        // TODO check this case against the new private unencrypted rooms spec
         - the existing join rule is "public" and the room is not encrypted
 
         Args:
