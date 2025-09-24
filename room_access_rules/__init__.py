@@ -244,10 +244,14 @@ class RoomAccessRules(object):
             if self.config.add_matrix_rtc_call_power_levels:
                 # Set Matrix RTC Call needed pl to default events pl
                 default_events_pl = content.get("events_default", 0)
-                if content["events"].get(MATRIX_RTC_CALL_MEMBER_TYPE, None) is None:
+                existing_pl = content["events"].get(MATRIX_RTC_CALL_MEMBER_TYPE, None)
+                if existing_pl is None or existing_pl != default_events_pl:
                     content["events"][MATRIX_RTC_CALL_MEMBER_TYPE] = default_events_pl
                     changed = True
-                if content["events"].get(MATRIX_RTC_CALL_MEMBER_MSC_TYPE, None) is None:
+                existing_pl = content["events"].get(
+                    MATRIX_RTC_CALL_MEMBER_MSC_TYPE, None
+                )
+                if existing_pl is None or existing_pl != default_events_pl:
                     content["events"][
                         MATRIX_RTC_CALL_MEMBER_MSC_TYPE
                     ] = default_events_pl
