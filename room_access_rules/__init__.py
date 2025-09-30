@@ -346,12 +346,7 @@ class RoomAccessRules(object):
 
         # Let's use a state map instead of directly manipulating an array,
         # it's less error prone
-        initial_state: MutableStateMap[JsonDict] = {}
-        for event_dict in config.get("initial_state", []):
-            if "type" in event_dict and "state_key" in event_dict:
-                initial_state[
-                    (event_dict["type"], event_dict.get("state_key"))
-                ] = event_dict
+        initial_state = create_state_map(config.get("initial_state", []))
 
         join_rule_event = initial_state.get((EventTypes.JoinRules, ""))
         if join_rule_event:
@@ -1144,3 +1139,17 @@ class RoomAccessRules(object):
                 return True
 
         return False
+
+
+def create_state_map(
+    initial_state: List[JsonDict] | None,
+) -> MutableStateMap[JsonDict]:
+    if initial_state is None:
+        initial_state = []
+    initial_state_map: MutableStateMap[JsonDict] = {}
+    for event_dict in initial_state:
+        if "type" in event_dict and "state_key" in event_dict:
+            initial_state_map[
+                (event_dict["type"], event_dict["state_key"])
+            ] = event_dict
+    return initial_state_map
