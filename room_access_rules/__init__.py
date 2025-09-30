@@ -22,7 +22,15 @@ from synapse.events import EventBase
 from synapse.module_api import ModuleApi, UserID
 from synapse.module_api.errors import ConfigError, SynapseError
 from synapse.storage.database import LoggingTransaction
-from synapse.types import JsonMapping, Requester, ScheduledTask, StateMap, TaskStatus
+from synapse.types import (
+    JsonDict,
+    JsonMapping,
+    MutableStateMap,
+    Requester,
+    ScheduledTask,
+    StateMap,
+    TaskStatus,
+)
 from synapse.util.frozenutils import unfreeze
 
 logger = logging.getLogger(__name__)
@@ -327,6 +335,7 @@ class RoomAccessRules(object):
         is_direct = config.get("is_direct")
         preset = config.get("preset")
         access_rule = None
+        encrypted = None
         join_rule = None
 
         if (
@@ -335,51 +344,53 @@ class RoomAccessRules(object):
         ):
             return True
 
+        # Let's use a state map instead of directly manipulating an array,
+        # it's less error prone
+        initial_state = create_state_map(config.get("initial_state", []))
+
+        join_rule_event = initial_state.get((EventTypes.JoinRules, ""))
+        if join_rule_event:
+            join_rule = join_rule_event.get("content", {}).get("join_rule")
+
+        encrypted_event = initial_state.get((EventTypes.RoomEncryption, ""))
+
         # If there's a rules event in the initial state, check if it complies with the
         # spec for im.vector.room.access_rules and deny the request if not.
-        for event in config.get("initial_state", []):
-            if event["type"] == ACCESS_RULES_TYPE:
-                access_rule = event["content"].get("rule")
 
-                # Make sure the event has a valid content.
-                if access_rule is None:
-                    raise SynapseError(400, "Invalid access rule")
+        access_rule_event = initial_state.get((ACCESS_RULES_TYPE, ""))
+        if access_rule_event:
+            access_rule = access_rule_event.get("content", {}).get("rule")
+            encrypted = access_rule_event.get("content", {}).get("encrypted")
 
-                # Make sure the rule name is valid.
-                if access_rule not in VALID_ACCESS_RULES:
-                    raise SynapseError(400, "Invalid access rule")
+            # Make sure the event has a valid content.
+            if access_rule is None:
+                raise SynapseError(400, "Invalid access rule")
 
-                if (is_direct and access_rule != AccessRules.DIRECT) or (
-                    access_rule == AccessRules.DIRECT and not is_direct
-                ):
-                    raise SynapseError(400, "Invalid access rule")
+            # Make sure the rule name is valid.
+            if access_rule not in VALID_ACCESS_RULES:
+                raise SynapseError(400, "Invalid access rule")
 
-            if event["type"] == EventTypes.JoinRules:
-                join_rule = event["content"].get("join_rule")
-
-        if access_rule is None:
+            if (is_direct and access_rule != AccessRules.DIRECT) or (
+                access_rule == AccessRules.DIRECT and not is_direct
+            ):
+                raise SynapseError(400, "Invalid access rule")
+        else:
             # If there's no access rules event in the initial state, create one with the
             # default setting.
             if is_direct:
-                default_rule = AccessRules.DIRECT
+                access_rule = AccessRules.DIRECT
             else:
                 # If the default value for non-direct chat changes, we should make another
                 # case here for rooms created with either a "public" join_rule or the
                 # "public_chat" preset to make sure those keep defaulting to "restricted"
-                default_rule = AccessRules.RESTRICTED
+                access_rule = AccessRules.RESTRICTED
 
-            if not config.get("initial_state"):
-                config["initial_state"] = []
-
-            config["initial_state"].append(
-                {
-                    "type": ACCESS_RULES_TYPE,
-                    "state_key": "",
-                    "content": {"rule": default_rule},
-                }
-            )
-
-            access_rule = default_rule
+            access_rule_event = {
+                "type": ACCESS_RULES_TYPE,
+                "state_key": "",
+                "content": {"rule": access_rule},
+            }
+            initial_state[(ACCESS_RULES_TYPE, "")] = access_rule_event
 
         # Check that the preset in use is compatible with the access rule, whether it's
         # user-defined or the default.
@@ -389,6 +400,28 @@ class RoomAccessRules(object):
             join_rule == JoinRules.PUBLIC or preset == RoomCreationPreset.PUBLIC_CHAT
         ) and access_rule == AccessRules.DIRECT:
             raise SynapseError(400, "Invalid access rule")
+
+        # We need to take care of enforcing encryption in the module:
+        # we want to be able to have invite-only unencrypted room, which is not possible
+        # when using setting `encryption_enabled_by_default_for_room_type` of synapse
+        force_encryption = True
+        if (
+            preset
+            == RoomCreationPreset.PUBLIC_CHAT
+            # TODO check if access rule matters here, probably not
+            # and access_rule == AccessRules.RESTRICTED
+        ):
+            force_encryption = False
+
+        if preset == RoomCreationPreset.PRIVATE_CHAT and encrypted is False:
+            force_encryption = False
+
+        if force_encryption and encrypted_event is None:
+            initial_state[(EventTypes.RoomEncryption, "")] = {
+                "type": EventTypes.RoomEncryption,
+                "state_key": "",
+                "content": {"algorithm": "m.megolm.v1.aes-sha2"},
+            }
 
         default_power_levels = self._get_default_power_levels(
             requester.user.to_string()
@@ -410,16 +443,15 @@ class RoomAccessRules(object):
 
         custom_user_power_levels = config.get("power_level_content_override")
 
-        # Second loop for events we need to know the current rule to process.
-        for event in config.get("initial_state", []):
-            if event["type"] == EventTypes.PowerLevels:
-                allowed = self._is_power_level_content_allowed(
-                    event["content"], access_rule, default_power_levels
-                )
-                if not allowed:
-                    raise SynapseError(400, "Invalid power levels content")
+        pl_event = initial_state.get((EventTypes.PowerLevels, ""))
+        if pl_event:
+            allowed = self._is_power_level_content_allowed(
+                pl_event["content"], access_rule, default_power_levels
+            )
+            if not allowed:
+                raise SynapseError(400, "Invalid power levels content")
 
-                custom_user_power_levels = event["content"]
+            custom_user_power_levels = pl_event["content"]
 
         if custom_user_power_levels:
             # If the user is using their own power levels, but failed to provide an
@@ -430,6 +462,8 @@ class RoomAccessRules(object):
             # If power levels were not overridden by the user, completely override with
             # the defaults instead
             config["power_level_content_override"] = default_power_levels
+
+        config["initial_state"] = initial_state.values()
 
         return True
 
@@ -923,6 +957,7 @@ class RoomAccessRules(object):
 
         A join rule change is always allowed unless:
         - the new join rule is "public" and the current access rule is "direct"
+        // TODO check this case against the new private unencrypted rooms spec
         - the existing join rule is "public" and the room is not encrypted
 
         Args:
@@ -1106,3 +1141,16 @@ class RoomAccessRules(object):
                 return True
 
         return False
+
+
+def create_state_map(
+    initial_state: List[JsonDict] | None,
+) -> MutableStateMap[JsonDict]:
+    if initial_state is None:
+        initial_state = []
+    initial_state_map: MutableStateMap[JsonDict] = {}
+    for event_dict in initial_state:
+        if "type" in event_dict:
+            state_key = event_dict.get("state_key", "")
+            initial_state_map[(event_dict["type"], state_key)] = event_dict
+    return initial_state_map
