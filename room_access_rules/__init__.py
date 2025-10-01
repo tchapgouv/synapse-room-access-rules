@@ -70,6 +70,11 @@ VALID_ACCESS_RULES = (
 RULES_WITH_RESTRICTED_POWER_LEVELS = (AccessRules.UNRESTRICTED,)
 
 
+class Visibility:
+    PUBLIC = "public"
+    PRIVATE = "private"
+
+
 @attr.s(frozen=True, auto_attribs=True)
 class RoomAccessRulesConfig:
     id_server: str
@@ -334,6 +339,7 @@ class RoomAccessRules(object):
         """
         is_direct = config.get("is_direct")
         preset = config.get("preset")
+        visibility = config.get("visibility", Visibility.PRIVATE)
         access_rule = None
         encrypted = None
         join_rule = None
@@ -361,6 +367,9 @@ class RoomAccessRules(object):
         if access_rule_event:
             access_rule = access_rule_event.get("content", {}).get("rule")
             encrypted = access_rule_event.get("content", {}).get("encrypted")
+            access_rule_event_visibility = access_rule_event.get("content", {}).get(
+                "visibility"
+            )
 
             # Make sure the event has a valid content.
             if access_rule is None:
@@ -374,6 +383,12 @@ class RoomAccessRules(object):
                 access_rule == AccessRules.DIRECT and not is_direct
             ):
                 raise SynapseError(400, "Invalid access rule")
+
+            if (
+                access_rule_event_visibility is not None
+                and access_rule_event_visibility != visibility
+            ):
+                raise SynapseError(400, "Incompatible visibility")
         else:
             # If there's no access rules event in the initial state, create one with the
             # default setting.
@@ -422,6 +437,10 @@ class RoomAccessRules(object):
                 "state_key": "",
                 "content": {"algorithm": "m.megolm.v1.aes-sha2"},
             }
+
+        # Set the visibility of the room in the access rules event, to be able to
+        # differentiate between public rooms and private rooms with a shareable link.
+        initial_state[(ACCESS_RULES_TYPE, "")]["content"]["visibility"] = visibility
 
         default_power_levels = self._get_default_power_levels(
             requester.user.to_string()
