@@ -15,5 +15,5 @@ files=(
 set -x
 
 black "${files[@]}"
-ruff --fix "${files[@]}"
+ruff check --fix "${files[@]}"
 mypy room_access_rules

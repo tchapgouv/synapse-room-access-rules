@@ -1170,7 +1170,7 @@ def create_state_map(
     initial_state_map: MutableStateMap[JsonDict] = {}
     for event_dict in initial_state:
         if "type" in event_dict and "state_key" in event_dict:
-            initial_state_map[
-                (event_dict["type"], event_dict["state_key"])
-            ] = event_dict
+            initial_state_map[(event_dict["type"], event_dict["state_key"])] = (
+                event_dict
+            )
     return initial_state_map

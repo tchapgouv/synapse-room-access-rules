@@ -17,16 +17,15 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   # for tests
-  "pydantic >= 1.7.4, < 2.0",
-  "matrix-synapse == 1.103.0",
+  "matrix-synapse == 1.123.0",
   "tox",
   "twisted",
   "aiounittest",
   # for type checking
-  "mypy == 1.6.1",
+  "mypy == 1.18.2",
   # for linting
-  "black == 23.10.0",
-  "ruff == 0.1.1",
+  "black == 25.9.0",
+  "ruff == 0.13.3",
 ]
 
 [project.urls]
@@ -44,6 +43,7 @@ strict = true
 [tool.ruff]
 line-length = 88
 
+[tool.ruff.lint]
 # See https://docs.astral.sh/ruff/rules/#error-e
 # for error codes. The ones we ignore are:
 #  E501: Line too long (black enforces this for us)

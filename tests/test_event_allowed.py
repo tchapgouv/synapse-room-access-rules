@@ -325,10 +325,10 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         # Test that we can send a 3PID invite to a room in which we've always been the
         # only member.
         state_with_3pid_invite = state_with_no_invite.copy()
-        state_with_3pid_invite[
-            (EventTypes.ThirdPartyInvite, "othertoken")
-        ] = self._new_3pid_invite(
-            self.room_creator, self.direct_room, token="othertoken"
+        state_with_3pid_invite[(EventTypes.ThirdPartyInvite, "othertoken")] = (
+            self._new_3pid_invite(
+                self.room_creator, self.direct_room, token="othertoken"
+            )
         )
 
         # Test that we can't send a 3PID invite to a room in which there's already a 3PID
@@ -592,9 +592,9 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         self.assertTrue(allowed)
 
         # Add the invite into the room's state so we can revoke it.
-        state_events[
-            (EventTypes.ThirdPartyInvite, invite_event.state_key)
-        ] = invite_event
+        state_events[(EventTypes.ThirdPartyInvite, invite_event.state_key)] = (
+            invite_event
+        )
 
         # Check that the module understands a revocation of the invite as such, and not as
         # a new invite.
@@ -611,9 +611,9 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
 
         self.assertTrue(allowed)
 
-        state_events[
-            (EventTypes.ThirdPartyInvite, invite_event.state_key)
-        ] = invite_event
+        state_events[(EventTypes.ThirdPartyInvite, invite_event.state_key)] = (
+            invite_event
+        )
 
         # Check that the revoked invite is ignored when processing a new invite - if it
         # isn't then the module would reject it since it would think we're trying to send
@@ -696,12 +696,12 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         )
 
         state_events = self.restricted_room_state.copy()
-        state_events[
-            (EventTypes.Member, self.forbidden_invitee)
-        ] = self._new_membership_event(
-            self.room_creator,
-            self.forbidden_invitee,
-            Membership.INVITE,
+        state_events[(EventTypes.Member, self.forbidden_invitee)] = (
+            self._new_membership_event(
+                self.room_creator,
+                self.forbidden_invitee,
+                Membership.INVITE,
+            )
         )
 
         # Check that a forbidden user cannot join a restricted room, even with an invite.
@@ -724,12 +724,12 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         self.assertFalse(allowed)
 
         state_events = self.unrestricted_room_state.copy()
-        state_events[
-            (EventTypes.Member, self.forbidden_invitee)
-        ] = self._new_membership_event(
-            self.room_creator,
-            self.forbidden_invitee,
-            Membership.INVITE,
+        state_events[(EventTypes.Member, self.forbidden_invitee)] = (
+            self._new_membership_event(
+                self.room_creator,
+                self.forbidden_invitee,
+                Membership.INVITE,
+            )
         )
 
         # Check that a forbidden user can join an unrestricted room if they have been
