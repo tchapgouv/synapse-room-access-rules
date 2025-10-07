@@ -796,6 +796,26 @@ class RoomAccessRules(object):
         Returns:
             True if the event can be allowed, False otherwise.
         """
+        prev_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
+
+        new_visibility = event.content.get("visibility", Visibility.PRIVATE)
+        if prev_rules_event:
+            prev_visibility = prev_rules_event.content.get(
+                "visibility", Visibility.PRIVATE
+            )
+
+            # Visibility of a room can't be changed after creation
+            if (
+                new_visibility != prev_visibility
+                # This needs to be possible for the fixer to be able to run
+                and not self.config.fix_visibility_access_rules
+            ):
+                return False
+        else:
+            # If no access rules event yet, we are at room creation, so we
+            # allow setting the visibility once
+            pass
+
         new_rule = event.content.get("rule")
 
         # Check for invalid values.
@@ -818,8 +838,6 @@ class RoomAccessRules(object):
                 event.room_id
             ):
                 return False
-
-        prev_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
 
         # Now that we know the new rule doesn't break the "direct" case, we can allow any
         # new rule in rooms that had none before.
