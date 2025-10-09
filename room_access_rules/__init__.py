@@ -445,6 +445,22 @@ class RoomAccessRules(object):
             # the defaults instead
             config["power_level_content_override"] = default_power_levels
 
+        # If an history visibility is not specified, defaults to invited for private rooms
+        # and shared for public ones
+        if initial_state.get((EventTypes.RoomHistoryVisibility, "")) is None:
+            history_visibility = "invited"
+            if (
+                join_rule == JoinRules.PUBLIC
+                or preset == RoomCreationPreset.PUBLIC_CHAT
+            ):
+                history_visibility = "shared"
+
+            initial_state[(EventTypes.RoomHistoryVisibility, "")] = {
+                "type": EventTypes.RoomHistoryVisibility,
+                "state_key": "",
+                "content": {"history_visibility": history_visibility},
+            }
+
         config["initial_state"] = initial_state.values()
 
         return True
