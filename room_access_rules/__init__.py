@@ -815,19 +815,22 @@ class RoomAccessRules(object):
         prev_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
 
         new_visibility = event.content.get("visibility", Visibility.PRIVATE)
-        prev_visibility = Visibility.PRIVATE
         if prev_rules_event:
             prev_visibility = prev_rules_event.content.get(
                 "visibility", Visibility.PRIVATE
             )
 
-        # Visibility of a room can't be changed after creation
-        if (
-            new_visibility != prev_visibility
-            # This needs to be possible for the fixer to be able to run
-            and not self.config.fix_visibility_access_rules
-        ):
-            return False
+            # Visibility of a room can't be changed after creation
+            if (
+                new_visibility != prev_visibility
+                # This needs to be possible for the fixer to be able to run
+                and not self.config.fix_visibility_access_rules
+            ):
+                return False
+        else:
+            # If no access rules event yet, we are at room creation, so we
+            # allow setting the visibility once
+            pass
 
         new_rule = event.content.get("rule")
 
