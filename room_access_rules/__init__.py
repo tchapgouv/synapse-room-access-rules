@@ -579,6 +579,14 @@ class RoomAccessRules(object):
             # the defaults instead
             config["power_level_content_override"] = default_power_levels
 
+        # If an history visibility is not specified, force invite by default
+        if initial_state.get((EventTypes.RoomHistoryVisibility, "")) is None:
+            initial_state[(EventTypes.RoomHistoryVisibility, "")] = {
+                "type": EventTypes.RoomHistoryVisibility,
+                "state_key": "",
+                "content": {"history_visibility": "invite"},
+            }
+
         config["initial_state"] = initial_state.values()
 
         return True
