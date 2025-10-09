@@ -406,8 +406,8 @@ class RoomAccessRules(object):
         # when using setting `encryption_enabled_by_default_for_room_type` of synapse
         force_encryption = True
         if (
-            preset
-            == RoomCreationPreset.PUBLIC_CHAT
+            join_rule == JoinRules.PUBLIC
+            or preset == RoomCreationPreset.PUBLIC_CHAT
             # TODO check if access rule matters here, probably not
             # and access_rule == AccessRules.RESTRICTED
         ):
