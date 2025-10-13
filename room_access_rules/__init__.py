@@ -14,7 +14,7 @@
 # limitations under the License.
 import email.utils
 import logging
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Tuple
 
 import attr
 from synapse.api.constants import EventTypes, JoinRules, Membership, RoomCreationPreset
@@ -142,9 +142,9 @@ class RoomAccessRules(object):
 
         return config
 
-    async def fix_existing_rooms_power_levels(
-        self, task: ScheduledTask
-    ) -> Tuple[TaskStatus, Optional[JsonMapping], Optional[str]]:
+    async def _fix_existing_rooms_task(
+        self, task: ScheduledTask, fixer: Callable[[str], Awaitable[None]]
+    ) -> None:
         def get_room_ids_from(
             txn: LoggingTransaction,
             limit: Optional[int] = None,
@@ -184,7 +184,7 @@ class RoomAccessRules(object):
                 has_next = False
 
             for room_id in room_ids:
-                await self.fix_room_power_levels(room_id)
+                await fixer(room_id)
                 last_room_id = room_id
 
             # Update task result so it is resumed from the last
@@ -196,11 +196,9 @@ class RoomAccessRules(object):
                 result={"last_room_id": last_room_id},
             )
 
-        logger.info("Fixing power levels of existing rooms complete !")
-
-        return TaskStatus.COMPLETE, None, None
-
-    async def fix_room_power_levels(self, room_id: str) -> None:
+    async def get_local_admin_user(
+        self, room_id: str, power_levels_event: EventBase
+    ) -> str | None:
         # Fetch local users joined to the room
         local_joined_users = set()
         for user_id, membership in await self.store.get_local_users_related_to_room(
@@ -209,24 +207,30 @@ class RoomAccessRules(object):
             if membership == "join":
                 local_joined_users.add(user_id)
 
-        # Fetch current power levels event and check if we have a local admin
-        power_levels_state = await self.module_api.get_room_state(
-            room_id, [("m.room.power_levels", "")]
-        )
-        power_levels_event = power_levels_state.get(("m.room.power_levels", ""))
+        # Check if we have a local admin from power levels event
         if power_levels_event and power_levels_event.content:
             content = unfreeze(power_levels_event.content)
-
-            admin_user = None
             content.setdefault("users", {})
             for u in content["users"]:
                 if u in local_joined_users and content["users"][u] == 100:
-                    admin_user = u
-                    break
+                    # if u is in local_joined_users then it is a str for sure
+                    return u  # type: ignore[no-any-return]
 
-            if not admin_user:
-                return
+        return None
 
+    async def fix_room_power_levels(self, room_id: str) -> None:
+        current_state = await self.module_api.get_room_state(
+            room_id, [(ACCESS_RULES_TYPE, ""), (EventTypes.PowerLevels, "")]
+        )
+
+        power_levels_event = current_state.get((EventTypes.PowerLevels, ""))
+        if not power_levels_event:
+            logger.info("No power levels event found for room %s, skipping", room_id)
+            return
+        content = unfreeze(power_levels_event.content)
+
+        local_admin_user = await self.get_local_admin_user(room_id, power_levels_event)
+        if local_admin_user:
             # We have an admin on this server !!
             # Let's patch the power levels with it
             changed = False
@@ -260,12 +264,7 @@ class RoomAccessRules(object):
             if self.config.fix_admins_for_dm_power_levels:
                 is_dm = False
 
-                access_rules_state = await self.module_api.get_room_state(
-                    room_id, [("im.vector.room.access_rules", "")]
-                )
-                access_rules_event = access_rules_state.get(
-                    ("im.vector.room.access_rules", "")
-                )
+                access_rules_event = current_state.get((ACCESS_RULES_TYPE, ""))
                 if access_rules_event:
                     if access_rules_event.content.get("rule", None) == "direct":
                         is_dm = True
@@ -287,9 +286,9 @@ class RoomAccessRules(object):
                     await self.module_api.create_and_send_event_into_room(
                         {
                             "room_id": room_id,
-                            "type": "m.room.power_levels",
+                            "type": EventTypes.PowerLevels,
                             "state_key": "",
-                            "sender": admin_user,
+                            "sender": local_admin_user,
                             "content": content,
                         }
                     )
@@ -298,6 +297,15 @@ class RoomAccessRules(object):
                         f"Not possible to change power levels of room {room_id}, {str(e)}"
                     )
                     logger.debug(content)
+
+    async def fix_existing_rooms_power_levels(
+        self, task: ScheduledTask
+    ) -> Tuple[TaskStatus, Optional[JsonMapping], Optional[str]]:
+        await self._fix_existing_rooms_task(task, self.fix_room_power_levels)
+
+        logger.info("Fixing power levels of existing rooms complete !")
+
+        return TaskStatus.COMPLETE, None, None
 
     async def on_create_room(
         self,
