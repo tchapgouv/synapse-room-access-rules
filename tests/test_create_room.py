@@ -16,8 +16,14 @@ from typing import Any, Dict, Optional
 
 import aiounittest
 from synapse.module_api.errors import SynapseError
+from synapse.types import JsonDict
 
-from room_access_rules import ACCESS_RULES_TYPE, AccessRules, EventTypes
+from room_access_rules import (
+    ACCESS_RULES_TYPE,
+    AccessRules,
+    EventTypes,
+    create_state_map,
+)
 from tests import MockRequester, create_module
 
 
@@ -30,19 +36,15 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
         """Tests that creating a room without specifying a rule defaults to the room's
         rule being "restricted".
         """
-        await self._create_room_and_check_rule(
-            direct=False,
-            expected_rule=AccessRules.RESTRICTED,
-        )
+        room_config = await self._create_room(direct=False, rule=AccessRules.RESTRICTED)
+        self._check_rule(room_config, AccessRules.RESTRICTED)
 
     async def test_create_room_direct_no_rule(self):
         """Tests that creating a DM without specifying a rule defaults to the room's
         rule being "direct".
         """
-        await self._create_room_and_check_rule(
-            direct=True,
-            expected_rule=AccessRules.DIRECT,
-        )
+        room_config = await self._create_room(direct=True, rule=AccessRules.DIRECT)
+        self._check_rule(room_config, AccessRules.DIRECT)
 
     async def test_create_room_valid_rule(self):
         """Tests that creating a room with a valid rule for the creation configuration
@@ -149,14 +151,17 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
         config = await self._create_room(
             initial_state=[{"type": EventTypes.PowerLevels, "content": pl_override}],
         )
-        self.assertEqual(config["initial_state"][1]["type"], EventTypes.PowerLevels)
+        initial_state_map = create_state_map(config["initial_state"])
+
+        pl_event = initial_state_map.get((EventTypes.PowerLevels, ""))
+        self.assertIsNotNone(pl_event)
         self.assertEqual(
-            config["initial_state"][1]["content"]["state_default"],
+            pl_event["content"]["state_default"],
             100,
             pl_override,
         )
         self.assertEqual(
-            config["initial_state"][1]["content"]["invite"],
+            pl_event["content"]["invite"],
             50,
             pl_override,
         )
@@ -196,16 +201,9 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
 
         return config
 
-    async def _create_room_and_check_rule(
-        self, expected_rule: str, direct: bool = False
-    ):
-        config = await self._create_room(direct=direct, rule=expected_rule)
+    def _check_rule(self, room_config: JsonDict, expected_rule: str):
+        initial_state = create_state_map(room_config.get("initial_state"))
 
-        self.assertIsInstance(config["initial_state"], list)
-        self.assertEqual(len(config["initial_state"]), 1)
-
-        event = config["initial_state"][0]
-
-        self.assertEqual(event["type"], ACCESS_RULES_TYPE)
-        self.assertIn("state_key", event)
-        self.assertEqual(event["content"]["rule"], expected_rule)
+        access_rule_event = initial_state.get((ACCESS_RULES_TYPE, ""))
+        self.assertIsNotNone(access_rule_event)
+        self.assertEqual(access_rule_event["content"]["rule"], expected_rule)
