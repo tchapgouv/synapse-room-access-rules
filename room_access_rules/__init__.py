@@ -17,7 +17,13 @@ import logging
 from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Tuple
 
 import attr
-from synapse.api.constants import EventTypes, JoinRules, Membership, RoomCreationPreset
+from synapse.api.constants import (
+    EventTypes,
+    JoinRules,
+    Membership,
+    RoomCreationPreset,
+    RoomEncryptionAlgorithms,
+)
 from synapse.events import EventBase
 from synapse.module_api import ModuleApi, UserID
 from synapse.module_api.errors import ConfigError, SynapseError
@@ -343,6 +349,7 @@ class RoomAccessRules(object):
         is_direct = config.get("is_direct")
         preset = config.get("preset")
         access_rule = None
+        encrypted = None
         join_rule = None
 
         if (
@@ -355,12 +362,15 @@ class RoomAccessRules(object):
         # it's less error prone
         initial_state = create_state_map(config.get("initial_state", []))
 
+        encrypted_event = initial_state.get((EventTypes.RoomEncryption, ""))
+
         # If there's a rules event in the initial state, check if it complies with the
         # spec for im.vector.room.access_rules and deny the request if not.
 
         access_rule_event = initial_state.get((ACCESS_RULES_TYPE, ""))
         if access_rule_event:
             access_rule = access_rule_event.get("content", {}).get("rule")
+            encrypted = access_rule_event.get("content", {}).get("encrypted")
 
             # Make sure the event has a valid content.
             if access_rule is None:
@@ -404,6 +414,26 @@ class RoomAccessRules(object):
             join_rule == JoinRules.PUBLIC or preset == RoomCreationPreset.PUBLIC_CHAT
         ) and access_rule == AccessRules.DIRECT:
             raise SynapseError(400, "Invalid access rule")
+
+        # We need to take care of enforcing encryption in the module:
+        # we want to be able to have invite-only unencrypted room, which is not possible
+        # when using setting `encryption_enabled_by_default_for_room_type` of synapse
+        force_encryption = True
+        if (
+            join_rule == JoinRules.PUBLIC
+            or preset == RoomCreationPreset.PUBLIC_CHAT
+        ):
+            force_encryption = False
+
+        if preset == RoomCreationPreset.PRIVATE_CHAT and encrypted is False:
+            force_encryption = False
+
+        if force_encryption and encrypted_event is None:
+            initial_state[(EventTypes.RoomEncryption, "")] = {
+                "type": EventTypes.RoomEncryption,
+                "state_key": "",
+                "content": {"algorithm": RoomEncryptionAlgorithms.MEGOLM_V1_AES_SHA2},
+            }
 
         default_power_levels = self._get_default_power_levels(
             requester.user.to_string()
@@ -678,6 +708,14 @@ class RoomAccessRules(object):
         Returns:
             True if the event can be allowed, False otherwise.
         """
+        prev_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
+        
+        # encrypted parameter should never be changed after creation of the room
+        new_encrypted = event.content.get("encrypted")
+        current_encrypted = prev_rules_event.content.get("encrypted", True) if prev_rules_event else None
+        if new_encrypted != current_encrypted:
+            return False
+
         new_rule = event.content.get("rule")
 
         # Check for invalid values.
@@ -701,8 +739,6 @@ class RoomAccessRules(object):
             ):
                 return False
 
-        prev_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
-
         # Now that we know the new rule doesn't break the "direct" case, we can allow any
         # new rule in rooms that had none before.
         if prev_rules_event is None:
@@ -711,7 +747,7 @@ class RoomAccessRules(object):
         prev_rule = prev_rules_event.content.get("rule")
 
         # Currently, we can only go from "restricted" to "unrestricted".
-        return (
+        return prev_rule == new_rule or (
             prev_rule == AccessRules.RESTRICTED and new_rule == AccessRules.UNRESTRICTED
         )
 
@@ -955,6 +991,7 @@ class RoomAccessRules(object):
 
         A join rule change is always allowed unless:
         - the new join rule is "public" and the current access rule is "direct"
+        // TODO check this case against the new private unencrypted rooms spec
         - the existing join rule is "public" and the room is not encrypted
 
         Args:
@@ -1031,6 +1068,7 @@ class RoomAccessRules(object):
         Returns:
             True if the event can be allowed, False otherwise.
         """
+        # TODO check vs encrypted attr on access rules event
         if self._get_join_rule_from_state(state_events) == JoinRules.PUBLIC:
             return False
         return True
