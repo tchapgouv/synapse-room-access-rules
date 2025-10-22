@@ -37,14 +37,31 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
         rule being "restricted".
         """
         room_config = await self._create_room(direct=False, rule=AccessRules.RESTRICTED)
-        self._check_rule(room_config, AccessRules.RESTRICTED)
+        self._check_rule_and_encryption(room_config, AccessRules.RESTRICTED)
+
+    async def test_create_room_unencrypted_private(self):
+        """Tests that creating a private room with encrypted at false in our custom event works well."""
+        room_config = await self._create_room(
+            direct=False,
+            initial_state=[
+                {
+                    "type": ACCESS_RULES_TYPE,
+                    "state_key": "",
+                    "content": {
+                        "rule": AccessRules.RESTRICTED,
+                        "encrypted": False,
+                    },
+                }
+            ],
+        )
+        self._check_rule_and_encryption(room_config, AccessRules.RESTRICTED, False)
 
     async def test_create_room_direct_no_rule(self):
         """Tests that creating a DM without specifying a rule defaults to the room's
         rule being "direct".
         """
         room_config = await self._create_room(direct=True, rule=AccessRules.DIRECT)
-        self._check_rule(room_config, AccessRules.DIRECT)
+        self._check_rule_and_encryption(room_config, AccessRules.DIRECT)
 
     async def test_create_room_valid_rule(self):
         """Tests that creating a room with a valid rule for the creation configuration
@@ -104,7 +121,7 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
             await self._create_room(
                 initial_state=[
                     {
-                        "type": "m.room.power_levels",
+                        "type": EventTypes.PowerLevels,
                         "content": pl_override_state_default,
                     }
                 ],
@@ -169,14 +186,19 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
     async def _create_room(
         self,
         direct: bool = False,
-        rule: str = AccessRules.RESTRICTED,
+        rule: str | None = None,
         power_levels_override: Optional[dict] = None,
         initial_state: Optional[list] = None,
     ) -> Dict[str, Any]:
         config = {
             "is_direct": direct,
-            "preset": "trusted_private_chat",
-            "initial_state": [
+            # TODO handle public
+            "preset": "trusted_private_chat" if direct else "private_chat",
+            "initial_state": [],
+        }
+
+        if rule:
+            config["initial_state"] = [
                 {
                     "type": ACCESS_RULES_TYPE,
                     "state_key": "",
@@ -184,8 +206,7 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
                         "rule": rule,
                     },
                 }
-            ],
-        }
+            ]
 
         if initial_state is not None:
             config["initial_state"] = config["initial_state"] + initial_state
@@ -201,9 +222,20 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
 
         return config
 
-    def _check_rule(self, room_config: JsonDict, expected_rule: str):
+    def _check_rule_and_encryption(
+        self, room_config: JsonDict, expected_rule: str, expected_encrypted: bool = True
+    ):
         initial_state = create_state_map(room_config.get("initial_state"))
 
         access_rule_event = initial_state.get((ACCESS_RULES_TYPE, ""))
         self.assertIsNotNone(access_rule_event)
         self.assertEqual(access_rule_event["content"]["rule"], expected_rule)
+
+        if expected_encrypted:
+            encryption_event = initial_state.get((EventTypes.RoomEncryption, ""))
+            self.assertIsNotNone(encryption_event)
+            self.assertEqual(
+                encryption_event["content"]["algorithm"], "m.megolm.v1.aes-sha2"
+            )
+        else:
+            self.assertNotIn((EventTypes.RoomEncryption, ""), initial_state)
