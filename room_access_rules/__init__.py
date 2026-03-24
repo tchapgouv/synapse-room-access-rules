@@ -76,6 +76,11 @@ VALID_ACCESS_RULES = (
 RULES_WITH_RESTRICTED_POWER_LEVELS = (AccessRules.UNRESTRICTED,)
 
 
+class Visibility:
+    PUBLIC = "public"
+    PRIVATE = "private"
+
+
 @attr.s(frozen=True, auto_attribs=True)
 class RoomAccessRulesConfig:
     id_server: str
@@ -348,6 +353,7 @@ class RoomAccessRules(object):
         """
         is_direct = config.get("is_direct")
         preset = config.get("preset")
+        visibility = config.get("visibility", Visibility.PRIVATE)
         access_rule = None
         encrypted = None
         join_rule = None
@@ -371,6 +377,9 @@ class RoomAccessRules(object):
         if access_rule_event:
             access_rule = access_rule_event.get("content", {}).get("rule")
             encrypted = access_rule_event.get("content", {}).get("encrypted")
+            access_rule_event_visibility = access_rule_event.get("content", {}).get(
+                "visibility"
+            )
 
             # Make sure the event has a valid content.
             if access_rule is None:
@@ -384,6 +393,12 @@ class RoomAccessRules(object):
                 access_rule == AccessRules.DIRECT and not is_direct
             ):
                 raise SynapseError(400, "Invalid access rule")
+
+            if (
+                access_rule_event_visibility is not None
+                and access_rule_event_visibility != visibility
+            ):
+                raise SynapseError(400, "Incompatible visibility")
         else:
             # If there's no access rules event in the initial state, create one with the
             # default setting.
@@ -434,6 +449,10 @@ class RoomAccessRules(object):
                 "state_key": "",
                 "content": {"algorithm": RoomEncryptionAlgorithms.MEGOLM_V1_AES_SHA2},
             }
+
+        # Set the visibility of the room in the access rules event, to be able to
+        # differentiate between public rooms and private rooms with a shareable link.
+        initial_state[(ACCESS_RULES_TYPE, "")]["content"]["visibility"] = visibility
 
         default_power_levels = self._get_default_power_levels(
             requester.user.to_string()
@@ -991,9 +1010,9 @@ class RoomAccessRules(object):
         """Check whether a join rule change is allowed.
 
         A join rule change is always allowed unless:
-        - the new join rule is "public" and the current access rule is "direct"
-        // TODO check this case against the new private unencrypted rooms spec
-        - the existing join rule is "public" and the room is not encrypted
+        - the new join rule is "public" and the current access rule is "direct". We need to
+          allow public join rules for private rooms too to be able to have rooms joinable by link.
+        - the existing join rule is "public" and the room has public visibility (it's a forum)
 
         Args:
             event: The event to check.
@@ -1005,11 +1024,16 @@ class RoomAccessRules(object):
         if event.content.get("join_rule") == JoinRules.PUBLIC:
             return rule != AccessRules.DIRECT
 
+        visibility = Visibility.PRIVATE
+        access_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
+        if access_rules_event:
+            visibility = access_rules_event.content.get("visibility", Visibility.PRIVATE)
+
         if (
             self._get_join_rule_from_state(state_events) == JoinRules.PUBLIC
             and event.content.get("join_rule") != JoinRules.PUBLIC
         ):
-            if not state_events.get((EventTypes.RoomEncryption, "")):
+            if visibility == Visibility.PUBLIC:
                 return False
 
         return True
@@ -1069,10 +1093,11 @@ class RoomAccessRules(object):
         Returns:
             True if the event can be allowed, False otherwise.
         """
-        # TODO check vs encrypted attr on access rules event
-        if self._get_join_rule_from_state(state_events) == JoinRules.PUBLIC:
-            return False
-        return True
+        visibility = Visibility.PRIVATE
+        access_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
+        if access_rules_event:
+            visibility = access_rules_event.content.get("visibility", Visibility.PRIVATE)
+        return visibility != Visibility.PUBLIC
 
     @staticmethod
     def _get_rule_from_state(state_events: StateMap[EventBase]) -> str:
