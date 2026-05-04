@@ -817,11 +817,11 @@ class RoomAccessRules(object):
             True if the event can be allowed, False otherwise.
         """
         prev_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
-        
+
         # encrypted parameter should never be changed after creation of the room
         if prev_rules_event:
-            new_encrypted = event.content.get("encrypted")
-            current_encrypted = prev_rules_event.content.get("encrypted", True)
+            new_encrypted = event.content.get("encrypted", None)
+            current_encrypted = prev_rules_event.content.get("encrypted", None)
             if new_encrypted != current_encrypted:
                 return False
 
