@@ -9,17 +9,21 @@ Restricts the access to a room based on the selected preset. Body:
 ```json
 {
     "rule": "<rule>",
+    "visibility": "<visibility>",
     "encrypted": <bool>
 }
 ```
 
 * `rule` (required): one of `restricted`, `unrestricted` or `direct`.
+* `visibility` (optional): either `public` or `private`. Indicates
+  whether the room is a truly public room (e.g. a forum listed in the
+  public room directory) or a private room — including one whose
+  `m.room.join_rules` is set to `public` only to expose a shareable
+  join link. Defaults to `private`.
 * `encrypted` (optional, at room creation only): boolean. When set to
   `false` on a room created with the `private_chat` preset, prevents
   the module from forcing end-to-end encryption on the room (see
-  "Default encryption" below). This field may only be set at room
-  creation time: any later `im.vector.room.access_rules` event that
-  changes its value will be rejected.
+  "Default encryption" below).
 
 The implementation of the different presets lives in the
 `room_access_rules` module.
@@ -91,6 +95,20 @@ possible with Synapse's built-in
 The `encrypted` attribute of the `im.vector.room.access_rules` event
 is only meaningful at room creation time and cannot be changed
 afterwards.
+
+### Room visibility
+
+The module tracks a `visibility` attribute inside the `im.vector.room.access_rules` event, which can be either `public` or `private` (defaults to `private`). This is distinct from `m.room.history_visibility` and is used to tell apart:
+
+* `visibility = public` a truly public room (e.g. a forum), typically with a `public` join rule and listed in the server's public room directory;
+* `visibility = private` a private room that merely exposes a shareable join link possibly with a `public` join rule but not listed in the public rooms directory.
+
+The `visibility` is set by the module at room creation from the `visibility` field of the `createRoom` request. If an explicit `im.vector.room.access_rules` event is also provided in `initial_state` with a `visibility` that differs from the one in the `createRoom` request, room creation is rejected.
+
+Once a room is created with `visibility = public`:
+
+* its join rule cannot be changed away from `public` (a forum must stay public);
+* enabling or changing the `m.room.encryption` state event is forbidden.
 
 ### Interaction with `m.room.join_rules`
 
