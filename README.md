@@ -140,6 +140,12 @@ modules:
         id_server: "vector.im"
         # Disable access rules for this list of users
         bypass_for_users: []
+
+
+        # If true, schedules a background task to fix the visibility
+        # attribute on access_rules events for existing forums.
+        # Defaults to false.
+        fix_visibility_access_rules: false
 ```
 
 ## Development and Testing
