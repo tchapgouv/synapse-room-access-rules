@@ -8,14 +8,21 @@ Restricts the access to a room based on the selected preset. Body:
 
 ```json
 {
-    "rule": "<rule>"
+    "rule": "<rule>",
+    "encrypted": <bool>
 }
 ```
 
-`<rule>` is either `restricted`, `unrestricted` or `direct`.
+* `rule` (required): one of `restricted`, `unrestricted` or `direct`.
+* `encrypted` (optional, at room creation only): boolean. When set to
+  `false` on a room created with the `private_chat` preset, prevents
+  the module from forcing end-to-end encryption on the room (see
+  "Default encryption" below). This field may only be set at room
+  creation time: any later `im.vector.room.access_rules` event that
+  changes its value will be rejected.
 
 The implementation of the different presets lives in the
-`synapse.third_party_rules.access_rules` module.
+`room_access_rules` module.
 
 ### `restricted` preset
 
@@ -64,6 +71,26 @@ into the room:
 
 Also forbids sending an event of the type `m.room.name`, `m.room.avatar_url`
 or `m.room.topic` into the room.
+
+### Default encryption
+
+At room creation, the module forces end-to-end encryption by adding an
+`m.room.encryption` state event (algorithm `m.megolm.v1.aes-sha2`) to
+the initial state of the room, unless one of the following is true:
+
+* the room is being created with `join_rule = public` or with the
+  `public_chat` preset;
+* the room is being created with the `private_chat` preset **and** the
+  `im.vector.room.access_rules` event provided in `initial_state`
+  explicitly sets `encrypted` to `false`.
+
+This allows invite-only unencrypted rooms to be created, which isn't
+possible with Synapse's built-in
+`encryption_enabled_by_default_for_room_type` setting.
+
+The `encrypted` attribute of the `im.vector.room.access_rules` event
+is only meaningful at room creation time and cannot be changed
+afterwards.
 
 ### Interaction with `m.room.join_rules`
 
