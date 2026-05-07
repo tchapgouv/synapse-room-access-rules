@@ -1174,7 +1174,7 @@ class RoomAccessRules(object):
         self, event: EventBase, state_events: StateMap[EventBase]
     ) -> bool:
         """Check whether a room can have its encryption enabled.
-        The current rule is to forbid such a change in public rooms.
+        The current rule is to forbid such a change in public rooms and in specifically room with force_unencrypted_at_creation
 
         Args:
             event: The event to check.
@@ -1183,11 +1183,15 @@ class RoomAccessRules(object):
         Returns:
             True if the event can be allowed, False otherwise.
         """
+
+
         visibility = Visibility.PRIVATE
+        force_unencrypted_at_creation = False
         access_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
         if access_rules_event:
             visibility = access_rules_event.content.get("visibility", Visibility.PRIVATE)
-        return visibility != Visibility.PUBLIC
+            force_unencrypted_at_creation = access_rules_event.content.get("force_unencrypted_at_creation", False)
+        return not force_unencrypted_at_creation and visibility != Visibility.PUBLIC
 
     @staticmethod
     def _get_rule_from_state(state_events: StateMap[EventBase]) -> str:
