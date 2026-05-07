@@ -444,7 +444,7 @@ class RoomAccessRules(object):
         preset = config.get("preset")
         visibility = config.get("visibility", Visibility.PRIVATE)
         access_rule = None
-        encrypted = None
+        force_unencrypted_at_creation = None
         join_rule = None
 
         if (
@@ -465,7 +465,7 @@ class RoomAccessRules(object):
         access_rule_event = initial_state.get((ACCESS_RULES_TYPE, ""))
         if access_rule_event:
             access_rule = access_rule_event.get("content", {}).get("rule")
-            encrypted = access_rule_event.get("content", {}).get("encrypted")
+            force_unencrypted_at_creation = access_rule_event.get("content", {}).get("force_unencrypted_at_creation")
             access_rule_event_visibility = access_rule_event.get("content", {}).get(
                 "visibility"
             )
@@ -529,7 +529,7 @@ class RoomAccessRules(object):
         ):
             force_encryption = False
 
-        if preset == RoomCreationPreset.PRIVATE_CHAT and encrypted is False:
+        if preset == RoomCreationPreset.PRIVATE_CHAT and force_unencrypted_at_creation is True:
             force_encryption = False
 
         if force_encryption and encrypted_event is None:
@@ -541,7 +541,7 @@ class RoomAccessRules(object):
 
         # Set the visibility of the room in the access rules event, to be able to
         # differentiate between public rooms and private rooms with a shareable link.
-        initial_state[(ACCESS_RULES_TYPE, "")]["content"]["visibility"] = visibility
+        initial_state[(ACCESS_RULES_TYPE, "")]["content"]["visibility"] = visibility ## TODO be done in he creation of the event
 
         default_power_levels = self._get_default_power_levels(
             requester.user.to_string()
@@ -817,13 +817,14 @@ class RoomAccessRules(object):
             True if the event can be allowed, False otherwise.
         """
         prev_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
-
+ 
+        # TODO : OD - commenting this this part, it does not make sense to change "force_unencrypted_at_creation" (previously named "encryption")
         # encrypted parameter should never be changed after creation of the room
-        if prev_rules_event:
-            new_encrypted = event.content.get("encrypted", None)
-            current_encrypted = prev_rules_event.content.get("encrypted", None)
-            if new_encrypted != current_encrypted:
-                return False
+        #if prev_rules_event:
+        #    new_encrypted = event.content.get("encrypted", None)
+        #    current_encrypted = prev_rules_event.content.get("encrypted", None)
+        #    if new_encrypted != current_encrypted:
+        #        return False
 
         new_rule = event.content.get("rule")
 
