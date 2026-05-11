@@ -21,6 +21,7 @@ dev = [
   "tox",
   "twisted",
   "aiounittest",
+  "coverage",
   # for type checking
   "mypy == 1.18.2",
   # for linting
