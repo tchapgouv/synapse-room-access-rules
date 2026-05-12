@@ -15,8 +15,10 @@ from typing import Optional
 
 import aiounittest
 
-from room_access_rules import ACCESS_RULES_TYPE, AccessRules
-from tests import PUBLIC_ROOM_ID, create_module, new_access_rules_event
+from room_access_rules import ACCESS_RULES_TYPE, AccessRules, Visibility
+from tests import create_module, new_access_rules_event
+
+PUBLIC_ROOM_ID = "!public:example.com"
 
 
 class RoomVisibilityTestCase(aiounittest.AsyncTestCase):
@@ -33,6 +35,7 @@ class RoomVisibilityTestCase(aiounittest.AsyncTestCase):
                 self.user_id,
                 PUBLIC_ROOM_ID,
                 AccessRules.RESTRICTED,
+                Visibility.PUBLIC,
             )
         }
 
@@ -42,6 +45,7 @@ class RoomVisibilityTestCase(aiounittest.AsyncTestCase):
                 self.user_id,
                 PUBLIC_ROOM_ID,
                 AccessRules.UNRESTRICTED,
+                Visibility.PUBLIC,
             ),
             state_events=state,
         )
@@ -54,6 +58,7 @@ class RoomVisibilityTestCase(aiounittest.AsyncTestCase):
                 self.user_id,
                 PUBLIC_ROOM_ID,
                 AccessRules.DIRECT,
+                Visibility.PUBLIC,
             ),
             state_events=state,
         )

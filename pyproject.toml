@@ -17,7 +17,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   # for tests
-  "matrix-synapse == 1.123.0",
+  "matrix-synapse == 1.147.1",
   "tox",
   "twisted",
   "aiounittest",

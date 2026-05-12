@@ -17,7 +17,13 @@ import logging
 from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Tuple
 
 import attr
-from synapse.api.constants import EventTypes, JoinRules, Membership, RoomCreationPreset
+from synapse.api.constants import (
+    EventTypes,
+    JoinRules,
+    Membership,
+    RoomCreationPreset,
+    RoomEncryptionAlgorithms,
+)
 from synapse.events import EventBase
 from synapse.module_api import ModuleApi, UserID
 from synapse.module_api.errors import ConfigError, SynapseError
@@ -70,6 +76,11 @@ VALID_ACCESS_RULES = (
 RULES_WITH_RESTRICTED_POWER_LEVELS = (AccessRules.UNRESTRICTED,)
 
 
+class Visibility:
+    PUBLIC = "public"
+    PRIVATE = "private"
+
+
 @attr.s(frozen=True, auto_attribs=True)
 class RoomAccessRulesConfig:
     id_server: str
@@ -78,6 +89,7 @@ class RoomAccessRulesConfig:
     fix_admins_for_dm_power_levels: bool = False
     add_live_location_power_levels: bool = False
     add_matrix_rtc_call_power_levels: bool = False
+    fix_visibility_access_rules: bool = False
 
 
 class RoomAccessRules(object):
@@ -111,24 +123,34 @@ class RoomAccessRules(object):
             "fix_existing_rooms_power_levels",
         )
 
-        # This will schedule a resumable long running task to fix power levels of existing rooms.
-        # Only schedules if we are the main process, and if we can't find an existing task in the queue.
+        self.task_scheduler.register_action(
+            self.fix_existing_rooms_visibility_access_rules,
+            "fix_existing_rooms_visibility_access_rules",
+        )
+
+        # Only schedules if we are the main process so we only queue one job per restart,
+        # but the job itself will be run on the background worker if available
         if (
             config.fix_admins_for_dm_power_levels
             or config.add_live_location_power_levels
             or config.add_matrix_rtc_call_power_levels
         ) and api.worker_name is None:
 
-            async def schedule_task_if_needed() -> None:
-                existing_tasks = await self.task_scheduler.get_tasks(
-                    actions=["fix_existing_rooms_power_levels"]
+            async def schedule_task() -> None:
+                await self.task_scheduler.schedule_task(
+                    "fix_existing_rooms_power_levels"
                 )
-                if not existing_tasks:
-                    await self.task_scheduler.schedule_task(
-                        "fix_existing_rooms_power_levels"
-                    )
 
-            api.delayed_background_call(0, schedule_task_if_needed)
+            api.delayed_background_call(0, schedule_task)
+
+        if config.fix_visibility_access_rules and api.worker_name is None:
+
+            async def schedule_task() -> None:
+                await self.task_scheduler.schedule_task(
+                    "fix_existing_rooms_visibility_access_rules"
+                )
+
+            api.delayed_background_call(0, schedule_task)
 
     @staticmethod
     def parse_config(config_dict: Dict[str, Any]) -> RoomAccessRulesConfig:
@@ -315,6 +337,123 @@ class RoomAccessRules(object):
 
         return TaskStatus.COMPLETE, None, None
 
+    async def fix_visibility_access_rules(self, room_id: str) -> None:
+        # We only want to add visibility=public to public rooms, since private is considered
+        # the default, so let's check if the room is present in the public room dir of a server.
+        if room_id not in self.public_room_ids:
+            return
+
+        current_state = await self.module_api.get_room_state(
+            room_id,
+            [
+                (ACCESS_RULES_TYPE, ""),
+                (EventTypes.JoinRules, ""),
+                (EventTypes.PowerLevels, ""),
+            ],
+        )
+
+        access_rule_event = current_state.get((ACCESS_RULES_TYPE, ""))
+        access_rule_event_visibility = None
+        if access_rule_event:
+            access_rule_event_visibility = access_rule_event.content.get("visibility")
+
+        join_rule_event = current_state.get((EventTypes.JoinRules, ""))
+        if join_rule_event:
+            join_rule = join_rule_event.get("content", {}).get("join_rule")
+            if (
+                join_rule == JoinRules.PUBLIC
+                and access_rule_event_visibility != Visibility.PUBLIC
+            ):
+                # On the principle this could be a "private" room with a link,
+                # but we already checked against the public room dir in the first step
+                access_rule_content = {}
+                if access_rule_event:
+                    access_rule_content = unfreeze(access_rule_event.content)
+
+                access_rule_content["visibility"] = Visibility.PUBLIC
+
+                power_levels_event = current_state.get((EventTypes.PowerLevels, ""))
+                if not power_levels_event:
+                    logger.warning(
+                        f"Couldn't fix room visibility for room {room_id}, no power levels event"
+                    )
+                    return
+                local_admin_user = await self.get_local_admin_user(
+                    room_id, power_levels_event
+                )
+
+                if local_admin_user:
+                    logger.info(
+                        f"Fixing room visibility in access rules event for room {room_id}"
+                    )
+                    try:
+                        await self.module_api.create_and_send_event_into_room(
+                            {
+                                "room_id": room_id,
+                                "type": ACCESS_RULES_TYPE,
+                                "state_key": "",
+                                "sender": local_admin_user,
+                                "content": access_rule_content,
+                            }
+                        )
+                    except SynapseError as e:
+                        logger.warning(
+                            f"Not possible to change access rules event of room {room_id}, {str(e)}"
+                        )
+                        logger.debug(access_rule_content)
+                else:
+                    logger.warning(
+                        f"Couldn't fix room visibility for room {room_id}, no local admin"
+                    )
+
+    async def fix_existing_rooms_visibility_access_rules(
+        self, task: ScheduledTask
+    ) -> Tuple[TaskStatus, Optional[JsonMapping], Optional[str]]:
+        # Let's gather all the public rooms by listing all rooms in the public room dir
+        # of all servers of the federation.
+        self.public_room_ids = set()
+
+        federation_server_names = []
+        federation_domain_whitelist = (
+            self.module_api._hs.config.federation.federation_domain_whitelist
+        )
+
+        if federation_domain_whitelist:
+            federation_server_names = list(federation_domain_whitelist.keys())
+
+        for server_name in federation_server_names:
+            if server_name == self.module_api.server_name:
+                for (
+                    room_id
+                ) in (
+                    await self.module_api._hs.get_storage_controllers().main.get_public_room_ids()
+                ):
+                    self.public_room_ids.add(room_id)
+            else:
+                since_token = None
+                while True:
+                    res = await self.module_api._hs.get_federation_client().get_public_rooms(
+                        server_name, since_token=since_token
+                    )
+                    if "chunk" in res:
+                        for r in res["chunk"]:
+                            self.public_room_ids.add(r["room_id"])
+                    since_token = res.get("next_batch")
+                    if not since_token:
+                        break
+
+        logger.info(
+            f"{len(self.public_room_ids)} public rooms were retrieved in the whole federation"
+        )
+
+        await self._fix_existing_rooms_task(task, self.fix_visibility_access_rules)
+
+        logger.info(
+            "Fixing visibility attribute on access rules event of existing rooms complete !"
+        )
+
+        return TaskStatus.COMPLETE, None, None
+
     async def on_create_room(
         self,
         requester: Requester,
@@ -342,7 +481,9 @@ class RoomAccessRules(object):
         """
         is_direct = config.get("is_direct")
         preset = config.get("preset")
+        visibility = config.get("visibility", Visibility.PRIVATE)
         access_rule = None
+        force_unencrypted_at_creation = None
         join_rule = None
 
         if (
@@ -355,12 +496,20 @@ class RoomAccessRules(object):
         # it's less error prone
         initial_state = create_state_map(config.get("initial_state", []))
 
+        encrypted_event = initial_state.get((EventTypes.RoomEncryption, ""))
+
         # If there's a rules event in the initial state, check if it complies with the
         # spec for im.vector.room.access_rules and deny the request if not.
 
         access_rule_event = initial_state.get((ACCESS_RULES_TYPE, ""))
         if access_rule_event:
             access_rule = access_rule_event.get("content", {}).get("rule")
+            force_unencrypted_at_creation = access_rule_event.get("content", {}).get(
+                "force_unencrypted_at_creation"
+            )
+            access_rule_event_visibility = access_rule_event.get("content", {}).get(
+                "visibility"
+            )
 
             # Make sure the event has a valid content.
             if access_rule is None:
@@ -374,6 +523,12 @@ class RoomAccessRules(object):
                 access_rule == AccessRules.DIRECT and not is_direct
             ):
                 raise SynapseError(400, "Invalid access rule")
+
+            if (
+                access_rule_event_visibility is not None
+                and access_rule_event_visibility != visibility
+            ):
+                raise SynapseError(400, "Incompatible visibility")
         else:
             # If there's no access rules event in the initial state, create one with the
             # default setting.
@@ -404,6 +559,30 @@ class RoomAccessRules(object):
             join_rule == JoinRules.PUBLIC or preset == RoomCreationPreset.PUBLIC_CHAT
         ) and access_rule == AccessRules.DIRECT:
             raise SynapseError(400, "Invalid access rule")
+
+        # We need to take care of enforcing encryption in the module:
+        # we want to be able to have invite-only unencrypted room, which is not possible
+        # when using setting `encryption_enabled_by_default_for_room_type` of synapse
+        force_encryption = True
+        if join_rule == JoinRules.PUBLIC or preset == RoomCreationPreset.PUBLIC_CHAT:
+            force_encryption = False
+
+        if (
+            preset == RoomCreationPreset.PRIVATE_CHAT
+            and force_unencrypted_at_creation is True
+        ):
+            force_encryption = False
+
+        if force_encryption and encrypted_event is None:
+            initial_state[(EventTypes.RoomEncryption, "")] = {
+                "type": EventTypes.RoomEncryption,
+                "state_key": "",
+                "content": {"algorithm": RoomEncryptionAlgorithms.MEGOLM_V1_AES_SHA2},
+            }
+
+        # Set the visibility of the room in the access rules event, to be able to
+        # differentiate between public rooms and private rooms with a shareable link.
+        initial_state[(ACCESS_RULES_TYPE, "")]["content"]["visibility"] = visibility
 
         default_power_levels = self._get_default_power_levels(
             requester.user.to_string()
@@ -659,7 +838,7 @@ class RoomAccessRules(object):
         rule = self._get_rule_from_state(state_events)
 
         # Allow adding a room to the public rooms list only if it is restricted
-        if new_visibility == "public":
+        if new_visibility == Visibility.PUBLIC:
             return rule == AccessRules.RESTRICTED
 
         # By default a room is created as "restricted", meaning it is allowed to be
@@ -678,6 +857,30 @@ class RoomAccessRules(object):
         Returns:
             True if the event can be allowed, False otherwise.
         """
+        prev_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
+
+        # force_unencrypted_at_creation parameter should never be changed after creation of the room
+        if prev_rules_event:
+            new_force_unencrypted = event.content.get(
+                "force_unencrypted_at_creation", None
+            )
+            current_force_unencrypted = prev_rules_event.content.get(
+                "force_unencrypted_at_creation", None
+            )
+            if new_force_unencrypted != current_force_unencrypted:
+                return False
+
+        # visibility parameter should never be changed after creation of the room
+        if prev_rules_event:
+            new_visibility = event.content.get(
+                "visibility", None
+            )
+            current_visibility = prev_rules_event.content.get(
+                "visibility", None
+            )
+            if new_visibility != current_visibility:
+                return False
+
         new_rule = event.content.get("rule")
 
         # Check for invalid values.
@@ -693,22 +896,21 @@ class RoomAccessRules(object):
             if len(existing_members) > 2 or len(threepid_tokens) > 1:
                 return False
 
-        if new_rule != AccessRules.RESTRICTED:
-            # Block this change if this room is currently listed in the public rooms
-            # directory
-            if await self.module_api.public_room_list_manager.room_is_in_public_room_list(
-                event.room_id
-            ):
-                return False
-
-        prev_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
-
         # Now that we know the new rule doesn't break the "direct" case, we can allow any
-        # new rule in rooms that had none before.
+        # new rule in rooms that had none before and is not public.
+        # (public rooms have visibility=public in a rules event)
         if prev_rules_event is None:
             return True
 
         prev_rule = prev_rules_event.content.get("rule")
+        visibility = prev_rules_event.content.get("visibility")
+
+        if prev_rule == new_rule:
+            return True
+
+        # Block this change if this room is marked as a public room
+        if new_rule != AccessRules.RESTRICTED and visibility == Visibility.PUBLIC:
+            return False
 
         # Currently, we can only go from "restricted" to "unrestricted".
         return (
@@ -954,8 +1156,9 @@ class RoomAccessRules(object):
         """Check whether a join rule change is allowed.
 
         A join rule change is always allowed unless:
-        - the new join rule is "public" and the current access rule is "direct"
-        - the existing join rule is "public" and the room is not encrypted
+        - the new join rule is "public" and the current access rule is "direct". We need to
+          allow public join rules for private rooms too to be able to have rooms joinable by link.
+        - the existing join rule is "public" and the room has public visibility (it's a forum)
 
         Args:
             event: The event to check.
@@ -967,11 +1170,18 @@ class RoomAccessRules(object):
         if event.content.get("join_rule") == JoinRules.PUBLIC:
             return rule != AccessRules.DIRECT
 
+        visibility = Visibility.PRIVATE
+        access_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
+        if access_rules_event:
+            visibility = access_rules_event.content.get(
+                "visibility", Visibility.PRIVATE
+            )
+
         if (
             self._get_join_rule_from_state(state_events) == JoinRules.PUBLIC
             and event.content.get("join_rule") != JoinRules.PUBLIC
         ):
-            if not state_events.get((EventTypes.RoomEncryption, "")):
+            if visibility == Visibility.PUBLIC:
                 return False
 
         return True
@@ -1022,7 +1232,7 @@ class RoomAccessRules(object):
         self, event: EventBase, state_events: StateMap[EventBase]
     ) -> bool:
         """Check whether a room can have its encryption enabled.
-        The current rule is to forbid such a change in public rooms.
+        The current rule is to forbid such a change in public rooms or in unencrypted private room
 
         Args:
             event: The event to check.
@@ -1031,9 +1241,18 @@ class RoomAccessRules(object):
         Returns:
             True if the event can be allowed, False otherwise.
         """
-        if self._get_join_rule_from_state(state_events) == JoinRules.PUBLIC:
-            return False
-        return True
+
+        visibility = Visibility.PRIVATE
+        force_unencrypted_at_creation = False
+        access_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
+        if access_rules_event:
+            visibility = access_rules_event.content.get(
+                "visibility", Visibility.PRIVATE
+            )
+            force_unencrypted_at_creation = access_rules_event.content.get(
+                "force_unencrypted_at_creation", False
+            )
+        return not force_unencrypted_at_creation and visibility != Visibility.PUBLIC
 
     @staticmethod
     def _get_rule_from_state(state_events: StateMap[EventBase]) -> str:

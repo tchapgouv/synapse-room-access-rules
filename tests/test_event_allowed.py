@@ -21,6 +21,7 @@ from room_access_rules import (
     EventTypes,
     JoinRules,
     Membership,
+    Visibility,
 )
 from tests import MockEvent, create_module, new_access_rules_event
 
@@ -98,7 +99,10 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
                 sender=self.room_creator,
                 type=ACCESS_RULES_TYPE,
                 state_key="",
-                content={"rule": AccessRules.UNRESTRICTED},
+                content={
+                    "rule": AccessRules.UNRESTRICTED,
+                    "visibility": Visibility.PUBLIC,
+                },
                 room_id=self.unrestricted_room,
             ),
             (EventTypes.Member, self.room_creator): MockEvent(
@@ -641,6 +645,12 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             content={"join_rule": JoinRules.PUBLIC},
             state_key="",
         )
+        state_events[(ACCESS_RULES_TYPE, "")] = MockEvent(
+            sender=self.room_creator,
+            type=ACCESS_RULES_TYPE,
+            content={"visibility": Visibility.PUBLIC},
+            state_key="",
+        )
 
         allowed, _ = await self.module.check_event_allowed(
             event=MockEvent(
@@ -662,6 +672,78 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             type=EventTypes.JoinRules,
             content={"join_rule": JoinRules.PUBLIC},
             state_key="",
+        )
+        state_events[(ACCESS_RULES_TYPE, "")] = MockEvent(
+            sender=self.room_creator,
+            type=ACCESS_RULES_TYPE,
+            content={"visibility": Visibility.PUBLIC},
+            state_key="",
+        )
+
+        allowed, _ = await self.module.check_event_allowed(
+            event=MockEvent(
+                sender=self.room_creator,
+                type=EventTypes.RoomEncryption,
+                content={},
+                state_key="",
+            ),
+            state_events=state_events,
+        )
+
+        self.assertFalse(allowed)
+
+    async def test_forbid_update_force_unencrypted(self):
+        """Tests that force_unencrypted_at_creation can not be updated"""
+        state_events = self.restricted_room_state.copy()
+        state_events[(ACCESS_RULES_TYPE, "")] = new_access_rules_event(
+            self.room_creator,
+            self.restricted_room_state,
+            AccessRules.RESTRICTED,
+            force_unencrypted_at_creation=False,
+        )
+
+        allowed, _ = await self.module.check_event_allowed(
+            event=new_access_rules_event(
+                self.room_creator,
+                self.restricted_room_state,
+                AccessRules.RESTRICTED,
+                force_unencrypted_at_creation=True,
+            ),
+            state_events=state_events,
+        )
+
+        self.assertFalse(allowed)
+
+    async def test_forbid_update_visibility(self):
+        """Tests that visibility can not be updated"""
+        state_events = self.restricted_room_state.copy()
+        state_events[(ACCESS_RULES_TYPE, "")] = new_access_rules_event(
+            self.room_creator,
+            self.restricted_room_state,
+            AccessRules.RESTRICTED,
+            visibility=Visibility.PUBLIC
+        )
+
+        allowed, _ = await self.module.check_event_allowed(
+            event=new_access_rules_event(
+                self.room_creator,
+                self.restricted_room_state,
+                AccessRules.RESTRICTED,
+                visibility=Visibility.PRIVATE,
+            ),
+            state_events=state_events,
+        )
+
+        self.assertFalse(allowed)
+
+    async def test_forbid_encryption_on_unencrypted_room(self):
+        """Tests that a unencrypted room can't have its encryption enabled."""
+        state_events = self.restricted_room_state.copy()
+        state_events[(ACCESS_RULES_TYPE, "")] = new_access_rules_event(
+            self.room_creator,
+            self.restricted_room_state,
+            AccessRules.RESTRICTED,
+            force_unencrypted_at_creation=True,
         )
 
         allowed, _ = await self.module.check_event_allowed(
@@ -772,13 +854,16 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             ),
             state_events=self.unrestricted_room_state
             | {
-                (EventTypes.RoomEncryption, ""): MockEvent(
+                (ACCESS_RULES_TYPE, ""): MockEvent(
                     sender=self.room_creator,
-                    type=EventTypes.RoomEncryption,
+                    type=ACCESS_RULES_TYPE,
                     state_key="",
-                    content={"algorithm": "m.megolm.v1.aes-sha2"},
+                    content={
+                        "rule": AccessRules.UNRESTRICTED,
+                        "visibility": Visibility.PRIVATE,
+                    },
                     room_id=self.unrestricted_room,
-                )
+                ),
             },
         )
         self.assertTrue(allowed)

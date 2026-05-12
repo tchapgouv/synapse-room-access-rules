@@ -18,19 +18,12 @@ from unittest.mock import AsyncMock, Mock
 import attr
 from synapse.module_api import ModuleApi, UserID
 
-from room_access_rules import ACCESS_RULES_TYPE, RoomAccessRules
-
-PUBLIC_ROOM_ID = "!public:example.com"
+from room_access_rules import ACCESS_RULES_TYPE, RoomAccessRules, Visibility
 
 
 class MockHttpClient:
     async def get_json(self, uri, args):
         return {"hs": args["address"].split("@")[1]}
-
-
-class MockPublicRoomListManager:
-    async def room_is_in_public_room_list(self, room_id: str) -> bool:
-        return room_id == PUBLIC_ROOM_ID
 
 
 class MockRequester:
@@ -68,14 +61,25 @@ class MockHomeserver:
         return Mock(spec=["register_action"])
 
 
-def new_access_rules_event(sender: str, room_id: str, rule: str) -> MockEvent:
-    return MockEvent(
+def new_access_rules_event(
+    sender: str,
+    room_id: str,
+    rule: str,
+    visibility: str | None = None,
+    force_unencrypted_at_creation: bool | None = None,
+) -> MockEvent:
+    event = MockEvent(
         sender=sender,
         type=ACCESS_RULES_TYPE,
         state_key="",
         content={"rule": rule},
         room_id=room_id,
     )
+    if visibility:
+        event.content["visibility"] = visibility
+    if force_unencrypted_at_creation is not None:
+        event.content["force_unencrypted_at_creation"] = force_unencrypted_at_creation
+    return event
 
 
 def create_module(
@@ -85,7 +89,6 @@ def create_module(
     # because some capabilities are needed for running the tests.
     module_api = Mock(spec=ModuleApi)
     module_api.http_client = MockHttpClient()
-    module_api.public_room_list_manager = MockPublicRoomListManager()
     module_api._hs = MockHomeserver()
     module_api.is_user_admin = AsyncMock(return_value=False)
 
