@@ -483,7 +483,7 @@ class RoomAccessRules(object):
         preset = config.get("preset")
         visibility = config.get("visibility", Visibility.PRIVATE)
         access_rule = None
-        encrypted = None
+        force_unencrypted_at_creation = None
         join_rule = None
 
         if (
@@ -504,7 +504,7 @@ class RoomAccessRules(object):
         access_rule_event = initial_state.get((ACCESS_RULES_TYPE, ""))
         if access_rule_event:
             access_rule = access_rule_event.get("content", {}).get("rule")
-            encrypted = access_rule_event.get("content", {}).get("encrypted")
+            force_unencrypted_at_creation = access_rule_event.get("content", {}).get("force_unencrypted_at_creation")
             access_rule_event_visibility = access_rule_event.get("content", {}).get(
                 "visibility"
             )
@@ -565,7 +565,7 @@ class RoomAccessRules(object):
         if join_rule == JoinRules.PUBLIC or preset == RoomCreationPreset.PUBLIC_CHAT:
             force_encryption = False
 
-        if preset == RoomCreationPreset.PRIVATE_CHAT and encrypted is False:
+        if preset == RoomCreationPreset.PRIVATE_CHAT and force_unencrypted_at_creation is True:
             force_encryption = False
 
         if force_encryption and encrypted_event is None:
@@ -854,11 +854,11 @@ class RoomAccessRules(object):
         """
         prev_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
 
-        # encrypted parameter should never be changed after creation of the room
+        # force_unencrypted_at_creation parameter should never be changed after creation of the room
         if prev_rules_event:
-            new_encrypted = event.content.get("encrypted", None)
-            current_encrypted = prev_rules_event.content.get("encrypted", None)
-            if new_encrypted != current_encrypted:
+            new_force_unencrypted = event.content.get("force_unencrypted_at_creation", None)
+            current_force_unencrypted = prev_rules_event.content.get("force_unencrypted_at_creation", None)
+            if new_force_unencrypted != current_force_unencrypted:
                 return False
 
         new_rule = event.content.get("rule")
@@ -1212,7 +1212,7 @@ class RoomAccessRules(object):
         self, event: EventBase, state_events: StateMap[EventBase]
     ) -> bool:
         """Check whether a room can have its encryption enabled.
-        The current rule is to forbid such a change in public rooms.
+        The current rule is to forbid such a change in public rooms or in unencrypted private room
 
         Args:
             event: The event to check.
@@ -1221,13 +1221,19 @@ class RoomAccessRules(object):
         Returns:
             True if the event can be allowed, False otherwise.
         """
+
+
         visibility = Visibility.PRIVATE
+        force_unencrypted_at_creation = False
         access_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
         if access_rules_event:
             visibility = access_rules_event.content.get(
                 "visibility", Visibility.PRIVATE
             )
-        return visibility != Visibility.PUBLIC
+            force_unencrypted_at_creation = access_rules_event.content.get(
+                "force_unencrypted_at_creation", False
+            )
+        return not force_unencrypted_at_creation and visibility != Visibility.PUBLIC
 
     @staticmethod
     def _get_rule_from_state(state_events: StateMap[EventBase]) -> str:

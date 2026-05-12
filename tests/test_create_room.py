@@ -40,7 +40,7 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
         self._check_rule_and_encryption(room_config, AccessRules.RESTRICTED)
 
     async def test_create_room_unencrypted_private(self):
-        """Tests that creating a private room with encrypted at false in our custom event works well."""
+        """Tests that creating a private room with force_unencrypted_at_creation at true in our custom event works well."""
         room_config = await self._create_room(
             direct=False,
             initial_state=[
@@ -49,7 +49,7 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
                     "state_key": "",
                     "content": {
                         "rule": AccessRules.RESTRICTED,
-                        "encrypted": False,
+                        "force_unencrypted_at_creation": True,
                     },
                 }
             ],

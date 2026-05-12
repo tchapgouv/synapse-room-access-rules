@@ -692,6 +692,44 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
 
         self.assertFalse(allowed)
 
+    async def test_forbid_update_force_unencrypted(self):
+        """Tests that force_unencrypted_at_creation can not be updated"""
+        state_events = self.restricted_room_state.copy()
+        state_events[(ACCESS_RULES_TYPE, "")] = new_access_rules_event(self.room_creator,
+                self.restricted_room_state,
+                AccessRules.RESTRICTED,
+                force_unencrypted_at_creation=False)
+
+        allowed, _ = await self.module.check_event_allowed(
+            event=new_access_rules_event(self.room_creator,
+                self.restricted_room_state,
+                AccessRules.RESTRICTED,
+                force_unencrypted_at_creation=True),
+            state_events=state_events,
+        )
+
+        self.assertFalse(allowed)
+    
+    async def test_forbid_encryption_on_unencrypted_room(self):
+        """Tests that a unencrypted room can't have its encryption enabled."""
+        state_events = self.restricted_room_state.copy()
+        state_events[(ACCESS_RULES_TYPE, "")] = new_access_rules_event(self.room_creator,
+                self.restricted_room_state,
+                AccessRules.RESTRICTED,
+                force_unencrypted_at_creation=True)
+
+        allowed, _ = await self.module.check_event_allowed(
+            event=MockEvent(
+                sender=self.room_creator,
+                type=EventTypes.RoomEncryption,
+                content={},
+                state_key="",
+            ),
+            state_events=state_events,
+        )
+
+        self.assertFalse(allowed)
+
     async def test_forbidden_users_join(self):
         """Tests that RoomAccessRules.check_event_allowed behaves accordingly.
 
