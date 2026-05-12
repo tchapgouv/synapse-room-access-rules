@@ -413,15 +413,15 @@ class RoomAccessRules(object):
         # of all servers of the federation.
         self.public_room_ids = set()
 
+        federation_server_names = []
         federation_domain_whitelist = (
             self.module_api._hs.config.federation.federation_domain_whitelist
         )
-        if not federation_domain_whitelist:
-            federation_domain_whitelist = []
-        else:
-            federation_domain_whitelist = federation_domain_whitelist.keys()
+        
+        if federation_domain_whitelist:
+            federation_server_names = list(federation_domain_whitelist.keys())
 
-        for server_name in federation_domain_whitelist:
+        for server_name in federation_server_names:
             if server_name == self.module_api.server_name:
                 for (
                     room_id
