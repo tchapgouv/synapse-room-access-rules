@@ -870,6 +870,17 @@ class RoomAccessRules(object):
             if new_force_unencrypted != current_force_unencrypted:
                 return False
 
+        # visibility parameter should never be changed after creation of the room
+        if prev_rules_event:
+            new_visibility = event.content.get(
+                "visibility", None
+            )
+            current_visibility = prev_rules_event.content.get(
+                "visibility", None
+            )
+            if new_visibility != current_visibility:
+                return False
+
         new_rule = event.content.get("rule")
 
         # Check for invalid values.

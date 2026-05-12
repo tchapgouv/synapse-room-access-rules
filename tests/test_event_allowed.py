@@ -714,6 +714,28 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
 
         self.assertFalse(allowed)
 
+    async def test_forbid_update_visibility(self):
+        """Tests that visibility can not be updated"""
+        state_events = self.restricted_room_state.copy()
+        state_events[(ACCESS_RULES_TYPE, "")] = new_access_rules_event(
+            self.room_creator,
+            self.restricted_room_state,
+            AccessRules.RESTRICTED,
+            visibility=Visibility.PUBLIC
+        )
+
+        allowed, _ = await self.module.check_event_allowed(
+            event=new_access_rules_event(
+                self.room_creator,
+                self.restricted_room_state,
+                AccessRules.RESTRICTED,
+                visibility=Visibility.PRIVATE,
+            ),
+            state_events=state_events,
+        )
+
+        self.assertFalse(allowed)
+
     async def test_forbid_encryption_on_unencrypted_room(self):
         """Tests that a unencrypted room can't have its encryption enabled."""
         state_events = self.restricted_room_state.copy()
