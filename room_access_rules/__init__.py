@@ -417,7 +417,7 @@ class RoomAccessRules(object):
         federation_domain_whitelist = (
             self.module_api._hs.config.federation.federation_domain_whitelist
         )
-        
+
         if federation_domain_whitelist:
             federation_server_names = list(federation_domain_whitelist.keys())
 
@@ -504,7 +504,9 @@ class RoomAccessRules(object):
         access_rule_event = initial_state.get((ACCESS_RULES_TYPE, ""))
         if access_rule_event:
             access_rule = access_rule_event.get("content", {}).get("rule")
-            force_unencrypted_at_creation = access_rule_event.get("content", {}).get("force_unencrypted_at_creation")
+            force_unencrypted_at_creation = access_rule_event.get("content", {}).get(
+                "force_unencrypted_at_creation"
+            )
             access_rule_event_visibility = access_rule_event.get("content", {}).get(
                 "visibility"
             )
@@ -565,7 +567,10 @@ class RoomAccessRules(object):
         if join_rule == JoinRules.PUBLIC or preset == RoomCreationPreset.PUBLIC_CHAT:
             force_encryption = False
 
-        if preset == RoomCreationPreset.PRIVATE_CHAT and force_unencrypted_at_creation is True:
+        if (
+            preset == RoomCreationPreset.PRIVATE_CHAT
+            and force_unencrypted_at_creation is True
+        ):
             force_encryption = False
 
         if force_encryption and encrypted_event is None:
@@ -856,8 +861,12 @@ class RoomAccessRules(object):
 
         # force_unencrypted_at_creation parameter should never be changed after creation of the room
         if prev_rules_event:
-            new_force_unencrypted = event.content.get("force_unencrypted_at_creation", None)
-            current_force_unencrypted = prev_rules_event.content.get("force_unencrypted_at_creation", None)
+            new_force_unencrypted = event.content.get(
+                "force_unencrypted_at_creation", None
+            )
+            current_force_unencrypted = prev_rules_event.content.get(
+                "force_unencrypted_at_creation", None
+            )
             if new_force_unencrypted != current_force_unencrypted:
                 return False
 
@@ -1221,7 +1230,6 @@ class RoomAccessRules(object):
         Returns:
             True if the event can be allowed, False otherwise.
         """
-
 
         visibility = Visibility.PRIVATE
         force_unencrypted_at_creation = False

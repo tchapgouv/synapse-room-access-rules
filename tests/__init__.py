@@ -62,7 +62,11 @@ class MockHomeserver:
 
 
 def new_access_rules_event(
-    sender: str, room_id: str, rule: str, visibility: str | None = None, force_unencrypted_at_creation: bool | None = None
+    sender: str,
+    room_id: str,
+    rule: str,
+    visibility: str | None = None,
+    force_unencrypted_at_creation: bool | None = None,
 ) -> MockEvent:
     event = MockEvent(
         sender=sender,
