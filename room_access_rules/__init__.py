@@ -180,16 +180,26 @@ class RoomAccessRules(object):
             limit: Optional[int] = None,
             from_id: Optional[str] = None,
         ) -> List[str]:
-            limit_statement = ""
-            if limit is not None:
-                limit_statement = f"LIMIT {limit}"
+            # room_id values are not constrained to a safe character set (a
+            # room created on a federated homeserver can contain arbitrary
+            # characters, including quotes), so they must never be
+            # interpolated into the SQL string. Use bound parameters for
+            # both the pagination cursor and the limit.
+            args: List[Any] = []
 
             where_statement = ""
             if from_id:
-                where_statement = f"WHERE room_id > '{from_id}'"
+                where_statement = "WHERE room_id > ?"
+                args.append(from_id)
+
+            limit_statement = ""
+            if limit is not None:
+                limit_statement = "LIMIT ?"
+                args.append(limit)
 
             txn.execute(
-                f"SELECT * FROM rooms {where_statement} ORDER BY room_id {limit_statement}"
+                f"SELECT * FROM rooms {where_statement} ORDER BY room_id {limit_statement}",
+                args,
             )
             rows = txn.fetchall()
             return [r[0] for r in rows]
