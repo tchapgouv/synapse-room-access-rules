@@ -130,6 +130,18 @@ modules:
         bypass_for_users: []
 ```
 
+### Configuration Flags
+
+The following boolean flags can be used to enable automatic fixes (jobs) for existing rooms:
+
+* `fix_admins_for_dm_power_levels` (default: `false`): When enabled, automatically sets all members of direct message rooms as admins (power level 100). This ensures both participants have equal administrative rights. Runs once on startup.
+
+* `add_live_location_power_levels` (default: `false`): When enabled, adds power level configuration for live location sharing events (`m.beacon_info` and `org.matrix.msc3672.beacon_info`) if missing, setting them to the default event power level. This allows normal users to use live location sharing by default. Runs once on startup.
+
+* `add_matrix_rtc_call_power_levels` (default: `false`): When enabled, adds power level configuration for Matrix RTC call events (`m.call.member` and `org.matrix.msc3401.call.member`) if missing, setting them to the default event power level. This allows normal users to participate in calls by default. Runs once on startup.
+
+* `fix_visibility_access_rules` (default: `false`): When enabled, automatically updates the `visibility` attribute in the `im.vector.room.access_rules` event for public rooms that are missing this attribute. Runs once on startup.
+
 ## Development and Testing
 
 This repository uses `tox` to run tests.
