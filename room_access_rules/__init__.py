@@ -861,24 +861,17 @@ class RoomAccessRules(object):
 
         # force_unencrypted_at_creation parameter should never be changed after creation of the room
         if prev_rules_event:
-            new_force_unencrypted = event.content.get(
-                "force_unencrypted_at_creation", None
-            )
-            current_force_unencrypted = prev_rules_event.content.get(
-                "force_unencrypted_at_creation", None
-            )
-            if new_force_unencrypted is not None and new_force_unencrypted != current_force_unencrypted:
+            new_force_unencrypted = event.content.get("force_unencrypted_at_creation")
+            current_force_unencrypted = prev_rules_event.content.get("force_unencrypted_at_creation")
+            if current_force_unencrypted is not None and new_force_unencrypted is not None and new_force_unencrypted != current_force_unencrypted:
                 return False
 
         # visibility parameter should never be changed after creation of the room
         if prev_rules_event:
-            new_visibility = event.content.get(
-                "visibility", None
-            )
-            current_visibility = prev_rules_event.content.get(
-                "visibility", None
-            )
-            if new_visibility is not None and new_visibility != current_visibility:
+            new_visibility = event.content.get("visibility")
+            current_visibility = prev_rules_event.content.get("visibility")
+            # deny current_visibility updates unless when fix_visibility_access_rules is active
+            if current_visibility is not None and new_visibility is not None and new_visibility != current_visibility and not self.config.fix_visibility_access_rules:
                 return False
 
         new_rule = event.content.get("rule")
