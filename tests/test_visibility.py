@@ -40,7 +40,7 @@ class RoomVisibilityTestCase(aiounittest.AsyncTestCase):
         }
 
         # Check that we can't change the rule to 'unrestricted'.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=new_access_rules_event(
                 self.user_id,
                 PUBLIC_ROOM_ID,
@@ -53,7 +53,7 @@ class RoomVisibilityTestCase(aiounittest.AsyncTestCase):
         self.assertFalse(allowed)
 
         # Check that we can't change the rule to 'direct'.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=new_access_rules_event(
                 self.user_id,
                 PUBLIC_ROOM_ID,

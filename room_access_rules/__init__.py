@@ -14,7 +14,17 @@
 # limitations under the License.
 import email.utils
 import logging
-from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Tuple
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Tuple,
+)
 
 import attr
 from synapse.api.constants import (
@@ -24,6 +34,7 @@ from synapse.api.constants import (
     RoomCreationPreset,
     RoomEncryptionAlgorithms,
 )
+from synapse.api.errors import Codes
 from synapse.events import EventBase
 from synapse.module_api import ModuleApi, UserID
 from synapse.module_api.errors import ConfigError, SynapseError
@@ -109,10 +120,12 @@ class RoomAccessRules(object):
         self.module_api = api
 
         self.module_api.register_third_party_rules_callbacks(
-            check_event_allowed=self.check_event_allowed,
             on_create_room=self.on_create_room,
             check_threepid_can_be_invited=self.check_threepid_can_be_invited,
             check_visibility_can_be_modified=self.check_visibility_can_be_modified,
+        )
+        self.module_api.register_spam_checker_callbacks(
+            check_event_for_spam=self.check_event_for_spam
         )
 
         self.task_scheduler = api._hs.get_task_scheduler()
@@ -759,11 +772,20 @@ class RoomAccessRules(object):
             return True
         return False
 
-    async def check_event_allowed(
+    async def check_event_for_spam(
+        self,
+        event: EventBase,
+    ) -> Literal["NOT_SPAM"] | Codes:
+        state_events = await self.module_api.get_room_state(event.room_id)
+        if await self._check_event_allowed(event, state_events):
+            return "NOT_SPAM"
+        return Codes.FORBIDDEN
+
+    async def _check_event_allowed(
         self,
         event: EventBase,
         state_events: StateMap[EventBase],
-    ) -> Tuple[bool, Optional[Dict[str, Any]]]:
+    ) -> bool:
         """Checks the event's type and the current rule and calls the right function to
         determine whether the event can be allowed.
 
@@ -778,50 +800,44 @@ class RoomAccessRules(object):
             None because this module doesn't replace event contents.
         """
         if await self._user_can_bypass_rules(event.sender):
-            return True, None
+            return True
 
         # We check the rules when altering the state of the room, so only go further if
         # the event is a state event.
         if event.is_state():
             if event.type == ACCESS_RULES_TYPE:
-                return await self._on_rules_change(event, state_events), None
+                return await self._on_rules_change(event, state_events)
 
             # We need to know the rule to apply when processing the event types below.
             rule = self._get_rule_from_state(state_events)
 
             if event.type == EventTypes.PowerLevels:
-                return (
-                    self._is_power_level_content_allowed(
+                return self._is_power_level_content_allowed(
                         event.content, rule, on_room_creation=False
-                    ),
-                    None,
-                )
+                    )
 
             if (
                 event.type == EventTypes.Member
                 or event.type == EventTypes.ThirdPartyInvite
             ):
-                return (
-                    await self._on_membership_or_invite(event, rule, state_events),
-                    None,
-                )
+                return await self._on_membership_or_invite(event, rule, state_events)
 
             if event.type == EventTypes.JoinRules:
-                return self._on_join_rule_change(event, rule, state_events), None
+                return self._on_join_rule_change(event, rule, state_events)
 
             if event.type == EventTypes.RoomAvatar:
-                return self._on_room_avatar_change(event, rule), None
+                return self._on_room_avatar_change(event, rule)
 
             if event.type == EventTypes.Name:
-                return self._on_room_name_change(event, rule), None
+                return self._on_room_name_change(event, rule)
 
             if event.type == EventTypes.Topic:
-                return self._on_room_topic_change(event, rule), None
+                return self._on_room_topic_change(event, rule)
 
             if event.type == EventTypes.RoomEncryption:
-                return self._on_room_encryption_change(event, state_events), None
+                return self._on_room_encryption_change(event, state_events)
 
-        return True, None
+        return True
 
     async def check_visibility_can_be_modified(
         self, room_id: str, state_events: StateMap[EventBase], new_visibility: str

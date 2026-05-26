@@ -162,13 +162,13 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             content=pl_content,
         )
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=pl_event,
             state_events=self.direct_room_state,
         )
         self.assertTrue(allowed)
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=pl_event,
             state_events=self.unrestricted_room_state,
         )
@@ -179,7 +179,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         servers but can invite other users.
         """
         # Tests that inviting an MXID from a forbidden HS isn't allowed.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=self._new_membership_event(
                 self.room_creator,
                 self.forbidden_invitee,
@@ -192,7 +192,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         self.assertFalse(allowed)
 
         # Tests that inviting an MXID from an allowed HS is allowed.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=self._new_membership_event(
                 self.room_creator,
                 self.allowed_invitee,
@@ -236,7 +236,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         in restricted mode) can be invited.
         """
         # Test that a 3rd user can't be invited.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=self._new_membership_event(
                 self.room_creator,
                 self.other_allowed_invitee,
@@ -255,7 +255,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             self.direct_room,
         )
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=join_event,
             state_events=self.direct_room_state,
         )
@@ -272,7 +272,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             self.direct_room,
         )
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=leave_event,
             state_events=state_with_join,
         )
@@ -289,7 +289,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             self.direct_room,
         )
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=invite_event,
             state_events=state_with_leave,
         )
@@ -301,7 +301,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         del state_with_no_invite[(EventTypes.Member, self.allowed_invitee)]
 
         # Test that can't send a 3PID invite to a room that already has two members.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=self._new_membership_event(
                 self.room_creator,
                 self.other_allowed_invitee,
@@ -314,13 +314,13 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
 
         # Test that we can't send a 3PID invite to a room that already has a pending
         # invite.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=self._new_3pid_invite(self.room_creator, self.direct_room),
             state_events=state_with_join,
         )
         self.assertFalse(allowed)
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=self._new_3pid_invite(self.room_creator, self.direct_room),
             state_events=self.direct_room_state,
         )
@@ -337,7 +337,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
 
         # Test that we can't send a 3PID invite to a room in which there's already a 3PID
         # invite.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=self._new_3pid_invite(self.room_creator, self.direct_room),
             state_events=state_with_3pid_invite,
         )
@@ -349,7 +349,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         mode.
         """
         # We can invite
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=self._new_membership_event(
                 self.room_creator,
                 self.forbidden_invitee,
@@ -360,7 +360,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         )
         self.assertTrue(allowed)
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=self._new_membership_event(
                 self.room_creator,
                 self.allowed_invitee,
@@ -392,7 +392,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
 
         # We can send a power level event that doesn't redefine the default PL or set a
         # non-default PL for a user that would be forbidden in restricted mode.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=MockEvent(
                 sender=self.room_creator,
                 type=EventTypes.PowerLevels,
@@ -408,7 +408,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
 
         # We can't send a power level event that redefines the default PL and doesn't set
         # a non-default PL for a user that would be forbidden in restricted mode.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=MockEvent(
                 sender=self.room_creator,
                 type=EventTypes.PowerLevels,
@@ -425,7 +425,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
 
         # We can't send a power level event that doesn't redefines the default PL but sets
         # a non-default PL for a user that would be forbidden in restricted mode.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=MockEvent(
                 sender=self.room_creator,
                 type=EventTypes.PowerLevels,
@@ -445,7 +445,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         unrestricted.
         """
         # We can't change the rule from restricted to direct.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=new_access_rules_event(
                 self.room_creator,
                 self.restricted_room,
@@ -456,7 +456,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         self.assertFalse(allowed)
 
         # We can change the rule from restricted to unrestricted.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=new_access_rules_event(
                 self.room_creator,
                 self.restricted_room,
@@ -467,7 +467,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         self.assertTrue(allowed)
 
         # We can't change the rule from unrestricted to restricted.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=new_access_rules_event(
                 self.room_creator,
                 self.unrestricted_room,
@@ -478,7 +478,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         self.assertFalse(allowed)
 
         # We can't change the rule from unrestricted to direct.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=new_access_rules_event(
                 self.room_creator,
                 self.unrestricted_room,
@@ -489,7 +489,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         self.assertFalse(allowed)
 
         # We can't change the rule from direct to restricted.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=new_access_rules_event(
                 self.room_creator,
                 self.direct_room,
@@ -499,7 +499,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         )
         self.assertFalse(allowed)
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=new_access_rules_event(
                 self.room_creator,
                 self.direct_room,
@@ -588,7 +588,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             invite_content,
         )
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=invite_event,
             state_events=state_events,
         )
@@ -608,7 +608,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             {},
         )
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=invite_event,
             state_events=state_events,
         )
@@ -629,7 +629,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             "someothertoken",
         )
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=invite_event,
             state_events=state_events,
         )
@@ -652,7 +652,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             state_key="",
         )
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=MockEvent(
                 sender=self.room_creator,
                 type=EventTypes.JoinRules,
@@ -680,7 +680,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             state_key="",
         )
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=MockEvent(
                 sender=self.room_creator,
                 type=EventTypes.RoomEncryption,
@@ -702,7 +702,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             force_unencrypted_at_creation=False,
         )
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=new_access_rules_event(
                 self.room_creator,
                 self.restricted_room_state,
@@ -724,7 +724,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             visibility=Visibility.PUBLIC,
         )
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=new_access_rules_event(
                 self.room_creator,
                 self.restricted_room_state,
@@ -733,11 +733,10 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             ),
             state_events=state_events,
         )
-
         self.assertFalse(allowed)
 
     async def test_allow_update_visibility_when_fixer_is_active(self):
-        """Tests that visibility can not be updated"""
+        """Tests that visibility can be updated"""
 
         self.module = create_module(
             {
@@ -753,7 +752,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             visibility=Visibility.PUBLIC,
         )
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=new_access_rules_event(
                 self.room_creator,
                 self.restricted_room_state,
@@ -775,7 +774,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             force_unencrypted_at_creation=True,
         )
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=MockEvent(
                 sender=self.room_creator,
                 type=EventTypes.RoomEncryption,
@@ -816,11 +815,11 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         )
 
         # Check that a forbidden user cannot join a restricted room, even with an invite.
-        allowed, _ = await self.module.check_event_allowed(forbidden_join, state_events)
+        allowed = await self.module._check_event_allowed(forbidden_join, state_events)
         self.assertFalse(allowed)
 
         # Check that an allowed user can join a restricted room, even without an invite.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=allowed_join,
             state_events=self.restricted_room_state,
         )
@@ -828,7 +827,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
 
         # Check that a forbidden user cannot join an unrestricted room if they haven't
         # been invited into it.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=forbidden_join,
             state_events=self.unrestricted_room_state,
         )
@@ -845,7 +844,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
 
         # Check that a forbidden user can join an unrestricted room if they have been
         # invited into it.
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=forbidden_join,
             state_events=state_events,
         )
@@ -862,7 +861,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         )
 
         # the existing join rule is "public" and the room is not encrypted
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=MockEvent(
                 sender=self.room_creator,
                 type=EventTypes.JoinRules,
@@ -874,7 +873,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         self.assertFalse(allowed)
 
         # the existing join rule is "public" and the room is encrypted
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=MockEvent(
                 sender=self.room_creator,
                 type=EventTypes.JoinRules,
@@ -928,19 +927,19 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         )
 
     async def _test_allowed_except_direct(self, event: MockEvent):
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=event,
             state_events=self.restricted_room_state,
         )
         self.assertTrue(allowed)
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=event,
             state_events=self.unrestricted_room_state,
         )
         self.assertTrue(allowed)
 
-        allowed, _ = await self.module.check_event_allowed(
+        allowed = await self.module._check_event_allowed(
             event=event,
             state_events=self.direct_room_state,
         )
