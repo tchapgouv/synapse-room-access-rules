@@ -119,6 +119,10 @@ class RoomAccessRules(object):
         self.config = config
         self.module_api = api
 
+        # We keep using check_visibility_can_be_modified because user_may_publish_room
+        # doesn't receive the new visibility state that we need to check.
+        # We keep using on_create_room because user_may_create_room doesn't allow us to
+        # change the initial state (needed to force the encryption or the visibility).
         self.module_api.register_third_party_rules_callbacks(
             on_create_room=self.on_create_room,
             check_visibility_can_be_modified=self.check_visibility_can_be_modified,
