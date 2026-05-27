@@ -121,11 +121,11 @@ class RoomAccessRules(object):
 
         self.module_api.register_third_party_rules_callbacks(
             on_create_room=self.on_create_room,
-            check_threepid_can_be_invited=self.check_threepid_can_be_invited,
             check_visibility_can_be_modified=self.check_visibility_can_be_modified,
         )
         self.module_api.register_spam_checker_callbacks(
-            check_event_for_spam=self.check_event_for_spam
+            check_event_for_spam=self.check_event_for_spam,
+            user_may_send_3pid_invite=self.user_may_send_3pid_invite,
         )
 
         self.task_scheduler = api._hs.get_task_scheduler()
@@ -713,42 +713,44 @@ class RoomAccessRules(object):
             ),  # Public room allows invite for all whereas other rooms should require mod to invite
         }
 
-    async def check_threepid_can_be_invited(
+    async def user_may_send_3pid_invite(
         self,
+        inviter: str,
         medium: str,
         address: str,
-        state_events: StateMap[EventBase],
-    ) -> bool:
+        room_id: str,
+    ) -> Literal["NOT_SPAM"] | Codes:
         """Check if a threepid can be invited to the room via a 3PID invite given the
         current rules and the threepid's address, by retrieving the HS it's mapped to
         from the configured identity server, and checking if we can invite users from it.
 
         Args:
+            inviter: The user ID of the inviter.
             medium: The medium of the threepid.
             address: The address of the threepid.
-            state_events: A dict mapping (event type, state key) to state event.
-                State events in the room the threepid is being invited to.
+            room_id: The ID of the room to check.
 
         Returns:
             Whether the threepid invite is allowed.
         """
+        state_events = await self.module_api.get_room_state(room_id)
         rule = self._get_rule_from_state(state_events)
 
         if medium != "email":
-            return False
+            return Codes.FORBIDDEN
 
         if rule != AccessRules.RESTRICTED:
             # Only "restricted" requires filtering 3PID invites. We don't need to do
             # anything for "direct" here, because only "restricted" requires filtering
             # based on the HS the address is mapped to.
-            return True
+            return "NOT_SPAM"
 
         parsed_address = email.utils.parseaddr(address)[1]
         if parsed_address != address:
             # Avoid reproducing the security issue described here:
             # https://matrix.org/blog/2019/04/18/security-update-sydent-1-0-2
             # It's probably not worth it but let's just be overly safe here.
-            return False
+            return Codes.FORBIDDEN
 
         # Get the HS this address belongs to from the identity server.
         res = await self.module_api.http_client.get_json(
@@ -758,11 +760,11 @@ class RoomAccessRules(object):
 
         # Look for a domain that's not forbidden from being invited.
         if not res.get("hs"):
-            return False
+            return Codes.FORBIDDEN
         if res.get("hs") in self.config.domains_forbidden_when_restricted:
-            return False
+            return Codes.FORBIDDEN
 
-        return True
+        return "NOT_SPAM"
 
     async def _user_can_bypass_rules(self, user_id: str) -> bool:
         if (

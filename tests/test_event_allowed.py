@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import Optional
+from unittest.mock import AsyncMock
 
 import aiounittest
+from synapse.api.errors import Codes
 
 from room_access_rules import (
     ACCESS_RULES_TYPE,
@@ -178,6 +180,10 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         """Tests that in restricted mode we're unable to invite users from blacklisted
         servers but can invite other users.
         """
+        self.module.module_api.get_room_state = AsyncMock(
+            return_value=self.restricted_room_state
+        )
+
         # Tests that inviting an MXID from a forbidden HS isn't allowed.
         allowed = await self.module._check_event_allowed(
             event=self._new_membership_event(
@@ -208,22 +214,24 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         # We test this through check_threepid_can_be_invited since this function will be
         # called before check_event_allowed, thus the check on whether the HS is allowed
         # or not happens here.
-        allowed = await self.module.check_threepid_can_be_invited(
+        allowed = await self.module.user_may_send_3pid_invite(
+            self.room_creator,
             medium="email",
             address=self.forbidden_email,
-            state_events=self.restricted_room_state,
+            room_id="!someroom",
         )
 
-        self.assertFalse(allowed)
+        self.assertEqual(allowed, Codes.FORBIDDEN)
 
         # Tests that inviting an email address from an allowed HS is allowed.
-        allowed = await self.module.check_threepid_can_be_invited(
+        allowed = await self.module.user_may_send_3pid_invite(
+            self.room_creator,
             medium="email",
             address=self.allowed_email,
-            state_events=self.restricted_room_state,
+            room_id="!someroom",
         )
 
-        self.assertTrue(allowed)
+        self.assertEqual(allowed, "NOT_SPAM")
 
     async def test_direct(self):
         """Tests that, in direct mode, other users than the initial two can't be invited,
@@ -348,6 +356,10 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         only change the power level of users that wouldn't be forbidden in restricted
         mode.
         """
+        self.module.module_api.get_room_state = AsyncMock(
+            return_value=self.unrestricted_room_state
+        )
+
         # We can invite
         allowed = await self.module._check_event_allowed(
             event=self._new_membership_event(
@@ -372,22 +384,26 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         self.assertTrue(allowed)
 
         # We can send a 3PID invite to an address that is mapped to a forbidden HS.
-        self.assertTrue(
-            await self.module.check_threepid_can_be_invited(
+        self.assertEqual(
+            await self.module.user_may_send_3pid_invite(
+                self.room_creator,
                 medium="email",
                 address=self.forbidden_email,
-                state_events=self.unrestricted_room_state,
-            )
+                room_id="!someroom",
+            ),
+            "NOT_SPAM",
         )
 
         # We can send a 3PID invite to an address that is mapped to an HS that's not
         # forbidden.
-        self.assertTrue(
-            await self.module.check_threepid_can_be_invited(
+        self.assertEqual(
+            await self.module.user_may_send_3pid_invite(
+                self.room_creator,
                 medium="email",
                 address=self.allowed_email,
-                state_events=self.unrestricted_room_state,
-            )
+                room_id="!someroom",
+            ),
+            "NOT_SPAM",
         )
 
         # We can send a power level event that doesn't redefine the default PL or set a
