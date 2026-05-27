@@ -721,7 +721,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             self.room_creator,
             self.restricted_room_state,
             AccessRules.RESTRICTED,
-            visibility=Visibility.PUBLIC
+            visibility=Visibility.PUBLIC,
         )
 
         allowed, _ = await self.module.check_event_allowed(
@@ -740,14 +740,17 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         """Tests that visibility can not be updated"""
 
         self.module = create_module(
-            {"domains_forbidden_when_restricted": ["forbidden.com"], "fix_visibility_access_rules" : True},
+            {
+                "domains_forbidden_when_restricted": ["forbidden.com"],
+                "fix_visibility_access_rules": True,
+            },
         )
         state_events = self.restricted_room_state.copy()
         state_events[(ACCESS_RULES_TYPE, "")] = new_access_rules_event(
             self.room_creator,
             self.restricted_room_state,
             AccessRules.RESTRICTED,
-            visibility=Visibility.PUBLIC
+            visibility=Visibility.PUBLIC,
         )
 
         allowed, _ = await self.module.check_event_allowed(

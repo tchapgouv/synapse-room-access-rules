@@ -96,6 +96,19 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
         self.assertEqual(pl_override["state_default"], 100, pl_override)
         self.assertEqual(pl_override["invite"], 50, pl_override)
 
+    async def test_create_public_room_default_power_level_rules(self):
+        """Tests that creating a room without overriding the power levels means the module
+        adds default power levels to the room creation config that differ from the default
+        values in the Matrix specification.
+        """
+        config = await self._create_room(public=True)
+
+        self.assertIn("power_level_content_override", config)
+
+        pl_override = config["power_level_content_override"]
+        self.assertEqual(pl_override["state_default"], 100, pl_override)
+        self.assertEqual(pl_override["invite"], 0, pl_override)
+
     async def test_create_room_fails_on_incorrect_power_level_rules(self):
         """Tests that creating a room with a power levels override that would set
         'state_default' and/or 'invite' to values too low to be allowed raises an
@@ -189,17 +202,22 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
         rule: str | None = None,
         power_levels_override: Optional[dict] = None,
         initial_state: Optional[list] = None,
+        public: bool = False,
     ) -> Dict[str, Any]:
         config = {
             "is_direct": direct,
-            # TODO handle public
-            "preset": "trusted_private_chat" if direct else "private_chat",
+            "preset": (
+                "trusted_private_chat"
+                if direct
+                else "public_chat" if public else "private_chat"
+            ),
             "initial_state": [],
         }
 
         if rule:
             config["initial_state"] = [
                 {
+                    
                     "type": ACCESS_RULES_TYPE,
                     "state_key": "",
                     "content": {
@@ -219,7 +237,6 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
             config=config,
             is_requester_admin=False,
         )
-
         return config
 
     def _check_rule_and_encryption(
