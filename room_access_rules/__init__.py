@@ -585,7 +585,7 @@ class RoomAccessRules(object):
         initial_state[(ACCESS_RULES_TYPE, "")]["content"]["visibility"] = visibility
 
         default_power_levels = self._get_default_power_levels(
-            requester.user.to_string()
+            requester.user.to_string(), preset
         )
 
         # This preset should put all invitees as admin, so do it
@@ -665,7 +665,12 @@ class RoomAccessRules(object):
     #
     # The same power levels are currently applied regardless of room preset.
     @staticmethod
-    def _get_default_power_levels(user_id: str) -> Dict[str, Any]:
+    def _get_default_power_levels(
+        user_id: str,
+        room_creation_preset: str | None = None,
+    ) -> Dict[str, Any]:
+        if room_creation_preset is None:
+            room_creation_preset = RoomCreationPreset.PRIVATE_CHAT
         return {
             "users": {user_id: 100},
             "users_default": 0,
@@ -690,7 +695,9 @@ class RoomAccessRules(object):
             "ban": 50,
             "kick": 50,
             "redact": 50,
-            "invite": 50,  # All rooms should require mod to invite, even private
+            "invite": (
+                0 if room_creation_preset == "public_chat" else 50
+            ),  # Public room allows invite for all whereas other rooms should require mod to invite
         }
 
     async def check_threepid_can_be_invited(
@@ -862,8 +869,14 @@ class RoomAccessRules(object):
         # force_unencrypted_at_creation parameter should never be changed after creation of the room
         if prev_rules_event:
             new_force_unencrypted = event.content.get("force_unencrypted_at_creation")
-            current_force_unencrypted = prev_rules_event.content.get("force_unencrypted_at_creation")
-            if current_force_unencrypted is not None and new_force_unencrypted is not None and new_force_unencrypted != current_force_unencrypted:
+            current_force_unencrypted = prev_rules_event.content.get(
+                "force_unencrypted_at_creation"
+            )
+            if (
+                current_force_unencrypted is not None
+                and new_force_unencrypted is not None
+                and new_force_unencrypted != current_force_unencrypted
+            ):
                 return False
 
         # visibility parameter should never be changed after creation of the room
@@ -871,7 +884,12 @@ class RoomAccessRules(object):
             new_visibility = event.content.get("visibility")
             current_visibility = prev_rules_event.content.get("visibility")
             # deny current_visibility updates unless when fix_visibility_access_rules is active
-            if current_visibility is not None and new_visibility is not None and new_visibility != current_visibility and not self.config.fix_visibility_access_rules:
+            if (
+                current_visibility is not None
+                and new_visibility is not None
+                and new_visibility != current_visibility
+                and not self.config.fix_visibility_access_rules
+            ):
                 return False
 
         new_rule = event.content.get("rule")
