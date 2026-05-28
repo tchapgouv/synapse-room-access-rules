@@ -217,7 +217,6 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
         if rule:
             config["initial_state"] = [
                 {
-                    
                     "type": ACCESS_RULES_TYPE,
                     "state_key": "",
                     "content": {

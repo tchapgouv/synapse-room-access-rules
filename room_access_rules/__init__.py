@@ -819,8 +819,8 @@ class RoomAccessRules(object):
 
             if event.type == EventTypes.PowerLevels:
                 return self._is_power_level_content_allowed(
-                        event.content, rule, on_room_creation=False
-                    )
+                    event.content, rule, on_room_creation=False
+                )
 
             if (
                 event.type == EventTypes.Member
