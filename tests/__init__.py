@@ -90,6 +90,7 @@ def create_module(
     module_api = Mock(spec=ModuleApi)
     module_api.http_client = MockHttpClient()
     module_api._hs = MockHomeserver()
+    module_api.server_name = server_name
     module_api.is_user_admin = AsyncMock(return_value=False)
 
     if config_override is None:

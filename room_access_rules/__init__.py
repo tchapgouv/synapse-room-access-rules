@@ -812,7 +812,7 @@ class RoomAccessRules(object):
         # the event is a state event.
         if event.is_state():
             if event.type == ACCESS_RULES_TYPE:
-                return await self._on_rules_change(event, state_events)
+                return await self._on_access_rules_event_change(event, state_events)
 
             # We need to know the rule to apply when processing the event types below.
             rule = self._get_rule_from_state(state_events)
@@ -874,48 +874,10 @@ class RoomAccessRules(object):
         # published to the public rooms directory.
         return True
 
-    async def _on_rules_change(
-        self, event: EventBase, state_events: StateMap[EventBase]
-    ) -> bool:
-        """Checks whether an im.vector.room.access_rules event is forbidden or allowed.
-
-        Args:
-            event: The im.vector.room.access_rules event.
-            state_events: A dict mapping (event type, state key) to state event.
-                State events in the room before the event was sent.
-        Returns:
-            True if the event can be allowed, False otherwise.
-        """
-        prev_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
-
-        # force_unencrypted_at_creation parameter should never be changed after creation of the room
-        if prev_rules_event:
-            new_force_unencrypted = event.content.get("force_unencrypted_at_creation")
-            current_force_unencrypted = prev_rules_event.content.get(
-                "force_unencrypted_at_creation"
-            )
-            if (
-                current_force_unencrypted is not None
-                and new_force_unencrypted is not None
-                and new_force_unencrypted != current_force_unencrypted
-            ):
-                return False
-
-        # visibility parameter should never be changed after creation of the room
-        if prev_rules_event:
-            new_visibility = event.content.get("visibility")
-            current_visibility = prev_rules_event.content.get("visibility")
-            # deny current_visibility updates unless when fix_visibility_access_rules is active
-            if (
-                current_visibility is not None
-                and new_visibility is not None
-                and new_visibility != current_visibility
-                and not self.config.fix_visibility_access_rules
-            ):
-                return False
-
+    def _check_rule(self, event: EventBase, state_events: StateMap[EventBase]) -> bool:
         new_rule = event.content.get("rule")
 
+        # TODO should we allow empty rule values?
         # Check for invalid values.
         if new_rule not in VALID_ACCESS_RULES:
             return False
@@ -929,6 +891,7 @@ class RoomAccessRules(object):
             if len(existing_members) > 2 or len(threepid_tokens) > 1:
                 return False
 
+        prev_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
         # Now that we know the new rule doesn't break the "direct" case, we can allow any
         # new rule in rooms that had none before and is not public.
         # (public rooms have visibility=public in a rules event)
@@ -936,19 +899,100 @@ class RoomAccessRules(object):
             return True
 
         prev_rule = prev_rules_event.content.get("rule")
-        visibility = prev_rules_event.content.get("visibility")
+        visibility = prev_rules_event.content.get("visibility", "private")
 
         if prev_rule == new_rule:
             return True
 
-        # Block this change if this room is marked as a public room
+        # Block opening this room to external users if this room is marked as a public room
         if new_rule != AccessRules.RESTRICTED and visibility == Visibility.PUBLIC:
             return False
 
-        # Currently, we can only go from "restricted" to "unrestricted".
+        # We don't want to be able to forbid a room to external users after they have been allowed
+        # because some could already have joined.
         return (
             prev_rule == AccessRules.RESTRICTED and new_rule == AccessRules.UNRESTRICTED
         )
+
+    def _check_visibility(
+        self,
+        event: EventBase,
+        state_events: StateMap[EventBase],
+        is_local_event: bool,
+    ) -> bool:
+        new_visibility = event.content.get("visibility", "private")
+        prev_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
+
+        if prev_rules_event:
+            # The meaning of the visibility parameter should never be changed after creation of the room.
+
+            current_visibility = prev_rules_event.content.get("visibility", "private")
+            # deny current_visibility updates unless when fix_visibility_access_rules is active
+            if (
+                new_visibility != current_visibility
+                and not self.config.fix_visibility_access_rules
+            ):
+                return False
+        elif is_local_event and new_visibility != "private":
+            # For local events, set a visibility other than "private" is only allowed at room creation
+            # and this is handled in `on_create_room`
+            return False
+
+        return True
+
+    def _check_force_unencrypted_at_creation(
+        self,
+        event: EventBase,
+        state_events: StateMap[EventBase],
+        is_local_event: bool,
+    ) -> bool:
+        prev_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
+
+        new_force_unencrypted = event.content.get(
+            "force_unencrypted_at_creation", False
+        )
+        if prev_rules_event:
+            # This value should never be changed after creation of the room.
+            current_force_unencrypted = prev_rules_event.content.get(
+                "force_unencrypted_at_creation", False
+            )
+            if new_force_unencrypted != current_force_unencrypted:
+                return False
+        elif is_local_event and new_force_unencrypted is not False:
+            # For local events, set force_unencrypted_at_creation=true is only allowed at room creation
+            # and this is handled in `on_create_room`
+            return False
+
+        return True
+
+    async def _on_access_rules_event_change(
+        self, event: EventBase, state_events: StateMap[EventBase]
+    ) -> bool:
+        """Checks whether an im.vector.room.access_rules event is forbidden or allowed.
+
+        Args:
+            event: The im.vector.room.access_rules event.
+            state_events: A dict mapping (event type, state key) to state event.
+                State events in the room before the event was sent.
+        Returns:
+            True if the event can be allowed, False otherwise.
+        """
+        is_local_event = (
+            UserID.from_string(event.sender).domain == self.module_api.server_name
+        )
+
+        if not self._check_rule(event, state_events):
+            return False
+
+        if not self._check_force_unencrypted_at_creation(
+            event, state_events, is_local_event
+        ):
+            return False
+
+        if not self._check_visibility(event, state_events, is_local_event):
+            return False
+
+        return True
 
     async def _on_membership_or_invite(
         self,
