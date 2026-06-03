@@ -60,6 +60,12 @@ class MockHomeserver:
     def get_task_scheduler(self):
         return Mock(spec=["register_action"])
 
+    def get_storage_controllers(self):
+        storage_controllers = Mock()
+        storage_controllers.main.get_public_room_ids = AsyncMock(return_value=[])
+        storage_controllers.state.get_current_state_ids = AsyncMock(return_value={})
+        return storage_controllers
+
 
 def new_access_rules_event(
     sender: str,
