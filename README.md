@@ -17,9 +17,11 @@ Restricts the access to a room based on the selected preset. Body:
 * `rule` (required): one of `restricted`, `unrestricted` or `direct`.
 * `visibility` (optional): either `public` or `private`. Indicates
   whether the room is listed in the public room directory
-* `force_unencrypted_at_creation` (optional, at room creation only): boolean. When set to
+* `force_unencrypted_at_creation`: boolean. When set to
   `true` on a room created with the `private_chat` preset, prevents
-  the module from forcing end-to-end encryption on the room.
+  the module from forcing end-to-end encryption on the room. In this 
+  case, any further updates of `im.vector.room.access_rules` event must 
+  include `force_unencrypted_at_creation:true` else the event is rejected.
 
 The implementation of the different presets lives in the
 `synapse.third_party_rules.access_rules` module.
@@ -83,11 +85,8 @@ At room creation, the module forces end-to-end encryption unless one of the foll
   explicitly sets `force_unencrypted_at_creation` to `true`.
 
 This allows invite-only unencrypted rooms to be created, which isn't
-possible with Synapse's built-in
-`encryption_enabled_by_default_for_room_type` setting.
+possible with Synapse's built-in `encryption_enabled_by_default_for_room_type` setting.
 
-The `force_unencrypted_at_creation` attribute of the `im.vector.room.access_rules` event
-is only meaningful at room creation time.
 
 ### Room visibility
 
