@@ -134,6 +134,7 @@ class RoomAccessRules(object):
 
         self.task_scheduler = api._hs.get_task_scheduler()
         self.store = api._hs.get_datastores().main
+        self.storage_controllers = api._hs.get_storage_controllers()
 
         self.task_scheduler.register_action(
             self.fix_existing_rooms_power_levels,
@@ -782,7 +783,15 @@ class RoomAccessRules(object):
         self,
         event: EventBase,
     ) -> Literal["NOT_SPAM"] | Codes:
-        state_events = await self.module_api.get_room_state(event.room_id)
+        state_ids = await self.storage_controllers.state.get_current_state_ids(
+            event.room_id,
+            await_full_state=False,
+        )
+        events = await self.store.get_events(state_ids.values())
+        state_events: StateMap[EventBase] = {
+            key: events[event_id] for key, event_id in state_ids.items()
+        }
+
         if await self._check_event_allowed(event, state_events):
             return "NOT_SPAM"
         return Codes.FORBIDDEN
