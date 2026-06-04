@@ -515,7 +515,7 @@ class RoomAccessRules(object):
             return True
 
         # external users are not allowed to create room
-        if get_domain_from_id(str(requester.user)) in self.config.domains_forbidden_when_restricted:
+        if get_domain_from_id(requester.user.to_string()) in self.config.domains_forbidden_when_restricted:
             raise SynapseError(403, "Room creation is not allowed for users from external servers (forbidden domains)")
 
         # Let's use a state map instead of directly manipulating an array,
