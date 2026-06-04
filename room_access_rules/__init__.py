@@ -47,6 +47,7 @@ from synapse.types import (
     ScheduledTask,
     StateMap,
     TaskStatus,
+    get_domain_from_id,
 )
 from synapse.util.frozenutils import unfreeze
 
@@ -478,7 +479,10 @@ class RoomAccessRules(object):
         config: Dict[str, Any],
         is_requester_admin: bool,
     ) -> bool:
-        """Checks if a im.vector.room.access_rules event is being set during room
+        """
+        Checks if requester has permission to create room (external users can not create room)
+
+        Checks if a im.vector.room.access_rules event is being set during room
         creation. If yes, make sure the event is correct. Otherwise, append an event
         with the default rule to the initial state.
 
@@ -509,6 +513,10 @@ class RoomAccessRules(object):
             or requester.user.to_string() in self.config.bypass_for_users
         ):
             return True
+
+        # external users are not allowed to create room
+        if get_domain_from_id(str(requester.user)) in self.config.domains_forbidden_when_restricted:
+            raise SynapseError(403, "Room creation is not allowed for users from external servers (forbidden domains)")
 
         # Let's use a state map instead of directly manipulating an array,
         # it's less error prone

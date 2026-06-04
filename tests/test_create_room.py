@@ -29,8 +29,9 @@ from tests import MockRequester, create_module
 
 class RoomCreateTestCase(aiounittest.AsyncTestCase):
     def setUp(self) -> None:
-        self.module = create_module()
+        self.module = create_module({"domains_forbidden_when_restricted": ["forbidden.com"]})
         self.user_id = "@mark:example.com"
+        self.forbidden_user_id = "@mark:forbidden.com"
 
     async def test_create_room_no_rule(self):
         """Tests that creating a room without specifying a rule defaults to the room's
@@ -196,6 +197,26 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
             pl_override,
         )
 
+    async def test_forbidden_domain_users_can_not_create_room(self):
+        """Tests that a user from a domain in domains_forbidden_when_restricted
+        cannot create a room.
+        """
+        with self.assertRaises(SynapseError):
+            await self.module.on_create_room(
+                requester=MockRequester(self.forbidden_user_id),
+                config={"is_direct": False, "preset": "private_chat", "initial_state": []},
+                is_requester_admin=False,
+            )
+
+    async def test_create_room_admin_bypasses_external_domain_restriction(self):
+        """Tests that an admin user from a forbidden domain can still create a room."""
+
+        await self.module.on_create_room(
+            requester=MockRequester(self.forbidden_user_id),
+            config={"is_direct": False, "preset": "private_chat", "initial_state": []},
+            is_requester_admin=True,
+        )
+
     async def _create_room(
         self,
         direct: bool = False,
@@ -203,7 +224,11 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
         power_levels_override: Optional[dict] = None,
         initial_state: Optional[list] = None,
         public: bool = False,
+        user_id: str = None
     ) -> Dict[str, Any]:
+
+        if not user_id:
+            user_id = self.user_id
         config = {
             "is_direct": direct,
             "preset": (
@@ -232,7 +257,7 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
             config["power_level_content_override"] = power_levels_override
 
         await self.module.on_create_room(
-            requester=MockRequester(self.user_id),
+            requester=MockRequester(user_id),
             config=config,
             is_requester_admin=False,
         )
