@@ -503,7 +503,14 @@ class RoomAccessRules(object):
         """
         is_direct = config.get("is_direct")
         preset = config.get("preset")
-        visibility = config.get("visibility", Visibility.PRIVATE)
+        visibility = config.get(
+            "visibility",
+            (
+                Visibility.PUBLIC
+                if preset == RoomCreationPreset.PUBLIC_CHAT
+                else Visibility.PRIVATE
+            ),
+        )
         access_rule = None
         force_unencrypted_at_creation = None
         join_rule = None
@@ -515,8 +522,14 @@ class RoomAccessRules(object):
             return True
 
         # external users are not allowed to create room
-        if get_domain_from_id(requester.user.to_string()) in self.config.domains_forbidden_when_restricted:
-            raise SynapseError(403, "Room creation is not allowed for users from external servers (forbidden domains)")
+        if (
+            get_domain_from_id(requester.user.to_string())
+            in self.config.domains_forbidden_when_restricted
+        ):
+            raise SynapseError(
+                403,
+                "Room creation is not allowed for users from external servers (forbidden domains)",
+            )
 
         # Let's use a state map instead of directly manipulating an array,
         # it's less error prone

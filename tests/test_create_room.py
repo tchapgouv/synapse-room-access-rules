@@ -29,7 +29,9 @@ from tests import MockRequester, create_module
 
 class RoomCreateTestCase(aiounittest.AsyncTestCase):
     def setUp(self) -> None:
-        self.module = create_module({"domains_forbidden_when_restricted": ["forbidden.com"]})
+        self.module = create_module(
+            {"domains_forbidden_when_restricted": ["forbidden.com"]}
+        )
         self.user_id = "@mark:example.com"
         self.forbidden_user_id = "@mark:forbidden.com"
 
@@ -204,7 +206,11 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
         with self.assertRaises(SynapseError):
             await self.module.on_create_room(
                 requester=MockRequester(self.forbidden_user_id),
-                config={"is_direct": False, "preset": "private_chat", "initial_state": []},
+                config={
+                    "is_direct": False,
+                    "preset": "private_chat",
+                    "initial_state": [],
+                },
                 is_requester_admin=False,
             )
 
@@ -224,7 +230,7 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
         power_levels_override: Optional[dict] = None,
         initial_state: Optional[list] = None,
         public: bool = False,
-        user_id: str = None
+        user_id: str = None,
     ) -> Dict[str, Any]:
 
         if not user_id:
