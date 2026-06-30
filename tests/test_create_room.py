@@ -112,6 +112,15 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
         self.assertEqual(pl_override["state_default"], 100, pl_override)
         self.assertEqual(pl_override["invite"], 0, pl_override)
 
+    async def test_create_public_room_default_visibility(self):
+        """Tests that creating a room with public preset correctly sets the visibility to public."""
+        config = await self._create_room(public=True)
+
+        initial_state = create_state_map(config["initial_state"])
+
+        access_rules_event = initial_state.get((ACCESS_RULES_TYPE, ""))
+        self.assertEqual(access_rules_event["content"]["visibility"], "public")
+
     async def test_create_room_fails_on_incorrect_power_level_rules(self):
         """Tests that creating a room with a power levels override that would set
         'state_default' and/or 'invite' to values too low to be allowed raises an
