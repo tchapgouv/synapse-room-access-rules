@@ -61,6 +61,10 @@ LOCATION_LIVE_SHARE_MSC_TYPE = "org.matrix.msc3672.beacon_info"
 MATRIX_RTC_CALL_MEMBER_TYPE = "m.call.member"
 MATRIX_RTC_CALL_MEMBER_MSC_TYPE = "org.matrix.msc3401.call.member"
 
+ROOM_RETENTION_TYPE = "m.room.retention"
+
+THREE_MONTHS_MS = 3 * 30 * 24 * 60 * 60 * 1000
+
 
 class AccessRules:
     DIRECT = "direct"
@@ -102,6 +106,7 @@ class RoomAccessRulesConfig:
     add_live_location_power_levels: bool = False
     add_matrix_rtc_call_power_levels: bool = False
     fix_visibility_access_rules: bool = False
+    fix_public_rooms_retention: bool = False
 
 
 class RoomAccessRules(object):
@@ -147,6 +152,11 @@ class RoomAccessRules(object):
             "fix_existing_rooms_visibility_access_rules",
         )
 
+        self.task_scheduler.register_action(
+            self.fix_public_rooms_retention,
+            "fix_public_rooms_retention",
+        )
+
         # Only schedules if we are the main process so we only queue one job per restart,
         # but the job itself will be run on the background worker if available
         if (
@@ -168,6 +178,13 @@ class RoomAccessRules(object):
                 await self.task_scheduler.schedule_task(
                     "fix_existing_rooms_visibility_access_rules"
                 )
+
+            api.delayed_background_call(0, schedule_task)
+
+        if config.fix_public_rooms_retention and api.worker_name is None:
+
+            async def schedule_task() -> None:
+                await self.task_scheduler.schedule_task("fix_public_rooms_retention")
 
             api.delayed_background_call(0, schedule_task)
 
@@ -473,6 +490,60 @@ class RoomAccessRules(object):
 
         return TaskStatus.COMPLETE, None, None
 
+    async def fix_public_rooms_retention(
+        self, task: ScheduledTask
+    ) -> Tuple[TaskStatus, Optional[JsonMapping], Optional[str]]:
+        await self._fix_existing_rooms_task(task, self.fix_public_room_retention)
+
+        logger.info("Fixing public rooms retention complete !")
+        return TaskStatus.COMPLETE, None, None
+
+    async def fix_public_room_retention(self, room_id: str) -> None:
+        # Check if the room is public
+        current_state = await self.module_api.get_room_state(room_id)
+        visibility = self._get_room_visibility(current_state)
+        if visibility != "public":
+            return
+
+        current_room_retention = current_state.get((ROOM_RETENTION_TYPE, ""))
+        current_max_lifetime = (
+            current_room_retention.content.get("max_lifetime")
+            if current_room_retention
+            else None
+        )
+
+        if current_max_lifetime is not None and current_max_lifetime <= THREE_MONTHS_MS:
+            # If the max lifetime is already 3 months or less, don't change it
+            return
+
+        power_levels_event = current_state.get((EventTypes.PowerLevels, ""))
+        if not power_levels_event:
+            logger.warning(
+                f"Couldn't fix public room retention for room {room_id}, no power levels event"
+            )
+            return
+        local_admin_user = await self.get_local_admin_user(room_id, power_levels_event)
+        if not local_admin_user:
+            logger.warning(
+                f"Couldn't fix public room retention for room {room_id}, no local admin user"
+            )
+            return
+
+        # Set retention to 3 months
+        logger.info(f"Fixing retention of room {room_id}")
+        try:
+            await self.module_api.create_and_send_event_into_room(
+                {
+                    "room_id": room_id,
+                    "type": ROOM_RETENTION_TYPE,
+                    "state_key": "",
+                    "sender": local_admin_user,
+                    "content": {"max_lifetime": THREE_MONTHS_MS},
+                }
+            )
+        except SynapseError as e:
+            logger.info(f"Not possible to change retention of room {room_id}, {str(e)}")
+
     async def on_create_room(
         self,
         requester: Requester,
@@ -679,6 +750,25 @@ class RoomAccessRules(object):
                 "content": {"history_visibility": history_visibility},
             }
 
+        if visibility == Visibility.PUBLIC:
+            specified_max_lifetime = (
+                initial_state.get((ROOM_RETENTION_TYPE, ""), {})
+                .get("content", {})
+                .get("max_lifetime")
+            )
+            if specified_max_lifetime is not None:
+                if specified_max_lifetime > THREE_MONTHS_MS:
+                    raise SynapseError(
+                        400,
+                        "Max retention must be at maximum 3 months for public rooms",
+                    )
+            else:
+                initial_state[(ROOM_RETENTION_TYPE, "")] = {
+                    "type": ROOM_RETENTION_TYPE,
+                    "state_key": "",
+                    "content": {"max_lifetime": THREE_MONTHS_MS},
+                }
+
         config["initial_state"] = initial_state.values()
 
         return True
@@ -872,6 +962,9 @@ class RoomAccessRules(object):
 
             if event.type == EventTypes.RoomEncryption:
                 return self._on_room_encryption_change(event, state_events)
+
+            if event.type == ROOM_RETENTION_TYPE:
+                return self._on_room_retention_change(event, state_events)
 
         return True
 
@@ -1277,12 +1370,7 @@ class RoomAccessRules(object):
         if event.content.get("join_rule") == JoinRules.PUBLIC:
             return rule != AccessRules.DIRECT
 
-        visibility = Visibility.PRIVATE
-        access_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
-        if access_rules_event:
-            visibility = access_rules_event.content.get(
-                "visibility", Visibility.PRIVATE
-            )
+        visibility = self._get_room_visibility(state_events)
 
         if (
             self._get_join_rule_from_state(state_events) == JoinRules.PUBLIC
@@ -1349,17 +1437,25 @@ class RoomAccessRules(object):
             True if the event can be allowed, False otherwise.
         """
 
-        visibility = Visibility.PRIVATE
+        visibility = self._get_room_visibility(state_events)
         force_unencrypted_at_creation = False
         access_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
         if access_rules_event:
-            visibility = access_rules_event.content.get(
-                "visibility", Visibility.PRIVATE
-            )
             force_unencrypted_at_creation = access_rules_event.content.get(
                 "force_unencrypted_at_creation", False
             )
         return not force_unencrypted_at_creation and visibility != Visibility.PUBLIC
+
+    def _on_room_retention_change(
+        self, event: EventBase, state_events: StateMap[EventBase]
+    ) -> bool:
+        visibility = self._get_room_visibility(state_events)
+        if visibility == Visibility.PUBLIC:
+            retention = event.content.get("max_lifetime")
+            if retention is None or retention > THREE_MONTHS_MS:
+                return False
+
+        return True
 
     @staticmethod
     def _get_rule_from_state(state_events: StateMap[EventBase]) -> str:
@@ -1439,6 +1535,17 @@ class RoomAccessRules(object):
         )
 
         return token == threepid_invite_token
+
+    @staticmethod
+    def _get_room_visibility(state_events: StateMap[EventBase]) -> str:
+        """Get the visibility of the room from the state events."""
+        visibility = Visibility.PRIVATE
+        access_rules_event = state_events.get((ACCESS_RULES_TYPE, ""))
+        if access_rules_event:
+            visibility = access_rules_event.content.get(
+                "visibility", Visibility.PRIVATE
+            )
+        return visibility
 
     def _user_is_invited_to_room(
         self, user_id: str, state_events: StateMap[EventBase]

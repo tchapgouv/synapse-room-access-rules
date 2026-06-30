@@ -19,6 +19,8 @@ from synapse.api.errors import Codes
 
 from room_access_rules import (
     ACCESS_RULES_TYPE,
+    ROOM_RETENTION_TYPE,
+    THREE_MONTHS_MS,
     AccessRules,
     EventTypes,
     JoinRules,
@@ -943,6 +945,67 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
             },
         )
         self.assertTrue(allowed)
+
+    async def test_public_room_change_retention(self):
+        """Tests that a public room can't have its encryption enabled."""
+        state_events = self.restricted_room_state.copy()
+        state_events[(EventTypes.JoinRules, "")] = MockEvent(
+            sender=self.room_creator,
+            type=EventTypes.JoinRules,
+            content={"join_rule": JoinRules.PUBLIC},
+            state_key="",
+        )
+        state_events[(ACCESS_RULES_TYPE, "")] = MockEvent(
+            sender=self.room_creator,
+            type=ACCESS_RULES_TYPE,
+            content={"visibility": Visibility.PUBLIC},
+            state_key="",
+        )
+        state_events[(ROOM_RETENTION_TYPE, "")] = MockEvent(
+            sender=self.room_creator,
+            type=ROOM_RETENTION_TYPE,
+            content={"max_lifetime": THREE_MONTHS_MS},
+            state_key="",
+        )
+
+        # We should be able to lower the retention period of a public room
+        allowed = await self.module._check_event_allowed(
+            event=MockEvent(
+                sender=self.room_creator,
+                type=ROOM_RETENTION_TYPE,
+                content={"max_lifetime": THREE_MONTHS_MS - 1},
+                state_key="",
+            ),
+            state_events=state_events,
+        )
+
+        self.assertTrue(allowed)
+
+        # We should not be able to raise the retention period of a public room over 3 months
+        allowed = await self.module._check_event_allowed(
+            event=MockEvent(
+                sender=self.room_creator,
+                type=ROOM_RETENTION_TYPE,
+                content={"max_lifetime": THREE_MONTHS_MS + 1},
+                state_key="",
+            ),
+            state_events=state_events,
+        )
+
+        self.assertFalse(allowed)
+
+        # We should not be able to remove the retention period of a public room
+        allowed = await self.module._check_event_allowed(
+            event=MockEvent(
+                sender=self.room_creator,
+                type=ROOM_RETENTION_TYPE,
+                content={},
+                state_key="",
+            ),
+            state_events=state_events,
+        )
+
+        self.assertFalse(allowed)
 
     def _new_membership_event(
         self,

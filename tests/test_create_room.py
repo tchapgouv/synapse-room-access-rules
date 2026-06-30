@@ -20,6 +20,7 @@ from synapse.types import JsonDict
 
 from room_access_rules import (
     ACCESS_RULES_TYPE,
+    THREE_MONTHS_MS,
     AccessRules,
     EventTypes,
     create_state_map,
@@ -232,6 +233,32 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
             is_requester_admin=True,
         )
 
+    async def test_create_public_room_default_retention(self):
+        """Tests that creating a public room enforces the retention policy to 3 months by default."""
+        config = await self._create_room(public=True)
+
+        self.assertIn("power_level_content_override", config)
+
+        initial_state = create_state_map(config["initial_state"])
+
+        retention = initial_state.get(("m.room.retention", ""))
+        self.assertIsNotNone(retention, "retention should be set in initial state")
+
+        self.assertEqual(retention["content"]["max_lifetime"], THREE_MONTHS_MS)
+
+    async def test_create_public_room_with_excessive_retention(self):
+        """Tests that creating a public room with retention > 3 months is failing."""
+        with self.assertRaises(SynapseError):
+            await self._create_room(
+                public=True,
+                initial_state=[
+                    {
+                        "type": "m.room.retention",
+                        "content": {"max_lifetime": THREE_MONTHS_MS + 1},
+                    }
+                ],
+            )
+
     async def _create_room(
         self,
         direct: bool = False,
@@ -241,7 +268,6 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
         public: bool = False,
         user_id: str = None,
     ) -> Dict[str, Any]:
-
         if not user_id:
             user_id = self.user_id
         config = {
