@@ -182,7 +182,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         """Tests that in restricted mode we're unable to invite users from blacklisted
         servers but can invite other users.
         """
-        self.module.module_api.get_room_state = AsyncMock(
+        self.module.get_room_state = AsyncMock(
             return_value=self.restricted_room_state
         )
 
@@ -358,7 +358,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         only change the power level of users that wouldn't be forbidden in restricted
         mode.
         """
-        self.module.module_api.get_room_state = AsyncMock(
+        self.module.get_room_state = AsyncMock(
             return_value=self.unrestricted_room_state
         )
 

@@ -19,11 +19,12 @@ from typing import (
     Awaitable,
     Callable,
     Dict,
+    Iterable,
     List,
     Literal,
     Mapping,
     Optional,
-    Tuple, Iterable,
+    Tuple,
 )
 
 import attr
@@ -183,8 +184,11 @@ class RoomAccessRules(object):
 
             api.delayed_background_call(0, schedule_task)
 
+        self.target_public_rooms_retention = None
         if config.target_public_rooms_retention:
-            self.target_public_rooms_retention = Config.parse_duration(config.target_public_rooms_retention)
+            self.target_public_rooms_retention = Config.parse_duration(
+                config.target_public_rooms_retention
+            )
 
         if self.target_public_rooms_retention and api.worker_name is None:
 
@@ -218,7 +222,7 @@ class RoomAccessRules(object):
         room_id: str,
         event_filter: Iterable[tuple[str, str | None]] | None = None,
         await_full_state: bool = False,
-    ) -> dict[str, EventBase]:
+    ) -> StateMap[EventBase]:
         state_filter = None
         if event_filter:
             # If a filter was provided, turn it into a StateFilter and retrieve a filtered
@@ -226,9 +230,7 @@ class RoomAccessRules(object):
             state_filter = StateFilter.from_types(event_filter)
 
         state_ids = await self.storage_controllers.state.get_current_state_ids(
-            room_id,
-            state_filter,
-            await_full_state=await_full_state
+            room_id, state_filter, await_full_state=await_full_state
         )
 
         state_events = await self.store.get_events(state_ids.values())
@@ -539,9 +541,14 @@ class RoomAccessRules(object):
             else None
         )
 
-        if current_max_lifetime is not None and current_max_lifetime <= self.target_public_rooms_retention:
+        if (
+            current_max_lifetime is not None
+            and current_max_lifetime <= self.target_public_rooms_retention
+        ):
             # If the max lifetime is already 3 months or less, don't change it
-            logger.warning(f"Room {room_id} max lifetime is already {self.target_public_rooms_retention} or less, don't change it")
+            logger.warning(
+                f"Room {room_id} max lifetime is already {self.target_public_rooms_retention} or less, don't change it"
+            )
             return
 
         power_levels_event = current_state.get((EventTypes.PowerLevels, ""))
@@ -570,7 +577,9 @@ class RoomAccessRules(object):
                 }
             )
         except SynapseError as e:
-            logger.warning(f"Not possible to change retention of room {room_id}, {str(e)}")
+            logger.warning(
+                f"Not possible to change retention of room {room_id}, {str(e)}"
+            )
 
     async def on_create_room(
         self,
