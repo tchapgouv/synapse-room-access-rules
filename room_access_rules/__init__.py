@@ -23,7 +23,7 @@ from typing import (
     Literal,
     Mapping,
     Optional,
-    Tuple,
+    Tuple, Iterable,
 )
 
 import attr
@@ -49,6 +49,7 @@ from synapse.types import (
     TaskStatus,
     get_domain_from_id,
 )
+from synapse.types.state import StateFilter
 from synapse.util.frozenutils import unfreeze
 
 logger = logging.getLogger(__name__)
@@ -208,6 +209,28 @@ class RoomAccessRules(object):
 
         return config
 
+    async def get_room_state(
+        self,
+        room_id: str,
+        event_filter: Iterable[tuple[str, str | None]] | None = None,
+        await_full_state: bool = False,
+    ) -> dict[str, EventBase]:
+        state_filter = None
+        if event_filter:
+            # If a filter was provided, turn it into a StateFilter and retrieve a filtered
+            # view of the state.
+            state_filter = StateFilter.from_types(event_filter)
+
+        state_ids = await self.storage_controllers.state.get_current_state_ids(
+            room_id,
+            state_filter,
+            await_full_state=await_full_state
+        )
+
+        state_events = await self.store.get_events(state_ids.values())
+
+        return {key: state_events[event_id] for key, event_id in state_ids.items()}
+
     async def _fix_existing_rooms_task(
         self, task: ScheduledTask, fixer: Callable[[str], Awaitable[None]]
     ) -> None:
@@ -285,7 +308,7 @@ class RoomAccessRules(object):
         return None
 
     async def fix_room_power_levels(self, room_id: str) -> None:
-        current_state = await self.module_api.get_room_state(
+        current_state = await self.get_room_state(
             room_id, [(ACCESS_RULES_TYPE, ""), (EventTypes.PowerLevels, "")]
         )
 
@@ -337,7 +360,7 @@ class RoomAccessRules(object):
 
                 if is_dm:
                     # it's a DM, let's try to fix it by putting everyone admins
-                    members_state = await self.module_api.get_room_state(
+                    members_state = await self.get_room_state(
                         room_id, [("m.room.member", None)]
                     )
                     for _, member in members_state:
@@ -379,7 +402,7 @@ class RoomAccessRules(object):
         if room_id not in self.public_room_ids:
             return
 
-        current_state = await self.module_api.get_room_state(
+        current_state = await self.get_room_state(
             room_id,
             [
                 (ACCESS_RULES_TYPE, ""),
@@ -500,7 +523,7 @@ class RoomAccessRules(object):
 
     async def fix_public_room_retention(self, room_id: str) -> None:
         # Check if the room is public
-        current_state = await self.module_api.get_room_state(room_id)
+        current_state = await self.get_room_state(room_id)
         visibility = self._get_room_visibility(current_state)
         if visibility != "public":
             return
@@ -849,7 +872,7 @@ class RoomAccessRules(object):
         Returns:
             Whether the threepid invite is allowed.
         """
-        state_events = await self.module_api.get_room_state(room_id)
+        state_events = await self.get_room_state(room_id)
         rule = self._get_rule_from_state(state_events)
 
         if medium != "email":
