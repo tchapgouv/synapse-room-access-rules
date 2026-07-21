@@ -35,6 +35,7 @@ from synapse.api.constants import (
     RoomEncryptionAlgorithms,
 )
 from synapse.api.errors import Codes
+from synapse.config._base import Config
 from synapse.events import EventBase
 from synapse.module_api import ModuleApi, UserID
 from synapse.module_api.errors import ConfigError, SynapseError
@@ -107,7 +108,7 @@ class RoomAccessRulesConfig:
     add_live_location_power_levels: bool = False
     add_matrix_rtc_call_power_levels: bool = False
     fix_visibility_access_rules: bool = False
-    fix_public_rooms_retention: bool = False
+    target_public_rooms_retention: str = ""
 
 
 class RoomAccessRules(object):
@@ -182,7 +183,10 @@ class RoomAccessRules(object):
 
             api.delayed_background_call(0, schedule_task)
 
-        if config.fix_public_rooms_retention and api.worker_name is None:
+        if config.target_public_rooms_retention:
+            self.target_public_rooms_retention = Config.parse_duration(config.target_public_rooms_retention)
+
+        if self.target_public_rooms_retention and api.worker_name is None:
 
             async def schedule_task() -> None:
                 await self.task_scheduler.schedule_task("fix_public_rooms_retention")
@@ -535,9 +539,9 @@ class RoomAccessRules(object):
             else None
         )
 
-        if current_max_lifetime is not None and current_max_lifetime <= THREE_MONTHS_MS:
+        if current_max_lifetime is not None and current_max_lifetime <= self.target_public_rooms_retention:
             # If the max lifetime is already 3 months or less, don't change it
-            logger.warning(f"Room {room_id} max lifetime is already 3 months or less, don't change it")
+            logger.warning(f"Room {room_id} max lifetime is already {self.target_public_rooms_retention} or less, don't change it")
             return
 
         power_levels_event = current_state.get((EventTypes.PowerLevels, ""))
@@ -562,7 +566,7 @@ class RoomAccessRules(object):
                     "type": ROOM_RETENTION_TYPE,
                     "state_key": "",
                     "sender": local_admin_user,
-                    "content": {"max_lifetime": THREE_MONTHS_MS},
+                    "content": {"max_lifetime": self.target_public_rooms_retention},
                 }
             )
         except SynapseError as e:
