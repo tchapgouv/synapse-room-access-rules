@@ -537,6 +537,7 @@ class RoomAccessRules(object):
 
         if current_max_lifetime is not None and current_max_lifetime <= THREE_MONTHS_MS:
             # If the max lifetime is already 3 months or less, don't change it
+            logger.warning(f"Room {room_id} max lifetime is already 3 months or less, don't change it")
             return
 
         power_levels_event = current_state.get((EventTypes.PowerLevels, ""))
@@ -565,7 +566,7 @@ class RoomAccessRules(object):
                 }
             )
         except SynapseError as e:
-            logger.info(f"Not possible to change retention of room {room_id}, {str(e)}")
+            logger.warning(f"Not possible to change retention of room {room_id}, {str(e)}")
 
     async def on_create_room(
         self,
