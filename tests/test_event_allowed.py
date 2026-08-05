@@ -182,9 +182,7 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         """Tests that in restricted mode we're unable to invite users from blacklisted
         servers but can invite other users.
         """
-        self.module.get_room_state = AsyncMock(
-            return_value=self.restricted_room_state
-        )
+        self.module.get_room_state = AsyncMock(return_value=self.restricted_room_state)
 
         # Tests that inviting an MXID from a forbidden HS isn't allowed.
         allowed = await self.module._check_event_allowed(
