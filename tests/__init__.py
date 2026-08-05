@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, Mock
 import attr
 from synapse.module_api import ModuleApi, UserID
 
-from room_access_rules import ACCESS_RULES_TYPE, RoomAccessRules, Visibility
+from room_access_rules import ACCESS_RULES_TYPE, RoomAccessRules
 
 
 class MockHttpClient:

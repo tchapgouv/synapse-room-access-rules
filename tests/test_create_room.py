@@ -275,7 +275,9 @@ class RoomCreateTestCase(aiounittest.AsyncTestCase):
             "preset": (
                 "trusted_private_chat"
                 if direct
-                else "public_chat" if public else "private_chat"
+                else "public_chat"
+                if public
+                else "private_chat"
             ),
             "initial_state": [],
         }

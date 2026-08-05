@@ -17,15 +17,14 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   # for tests
-  "matrix-synapse == 1.147.1",
+  "matrix-synapse == 1.157.2",
   "tox",
   "twisted",
   "aiounittest",
   # for type checking
-  "mypy == 1.18.2",
+  "mypy == 2.3.0",
   # for linting
-  "black == 25.9.0",
-  "ruff == 0.13.3",
+  "ruff == 0.16.1",
 ]
 
 [project.urls]
@@ -46,7 +45,6 @@ line-length = 88
 [tool.ruff.lint]
 # See https://docs.astral.sh/ruff/rules/#error-e
 # for error codes. The ones we ignore are:
-#  E501: Line too long (black enforces this for us)
 #  E731: do not assign a lambda expression, use a def
 #
 # flake8-bugbear compatible checks. Its error codes are described at

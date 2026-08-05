@@ -41,7 +41,7 @@ from synapse.events import EventBase
 from synapse.module_api import ModuleApi, UserID
 from synapse.module_api.errors import ConfigError, SynapseError
 from synapse.storage.database import LoggingTransaction
-from synapse.types import (
+from synapse.types import (  # type: ignore[attr-defined]
     JsonDict,
     JsonMapping,
     MutableStateMap,
@@ -351,9 +351,9 @@ class RoomAccessRules(object):
                     MATRIX_RTC_CALL_MEMBER_MSC_TYPE, None
                 )
                 if existing_pl is None or existing_pl != default_events_pl:
-                    content["events"][
-                        MATRIX_RTC_CALL_MEMBER_MSC_TYPE
-                    ] = default_events_pl
+                    content["events"][MATRIX_RTC_CALL_MEMBER_MSC_TYPE] = (
+                        default_events_pl
+                    )
                     changed = True
 
             if self.config.fix_admins_for_dm_power_levels:
@@ -488,11 +488,7 @@ class RoomAccessRules(object):
 
         for server_name in federation_server_names:
             if server_name == self.module_api.server_name:
-                for (
-                    room_id
-                ) in (
-                    await self.module_api._hs.get_storage_controllers().main.get_public_room_ids()
-                ):
+                for room_id in await self.module_api._hs.get_storage_controllers().main.get_public_room_ids():
                     self.public_room_ids.add(room_id)
             else:
                 since_token = None
@@ -1322,7 +1318,7 @@ class RoomAccessRules(object):
 
     def _is_power_level_content_allowed(
         self,
-        content: Dict[str, Any],
+        content: Mapping[str, Any],
         access_rule: str,
         default_power_levels: Optional[Dict[str, Any]] = None,
         on_room_creation: bool = True,
