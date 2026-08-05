@@ -308,7 +308,6 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
         state_with_no_invite = self.direct_room_state.copy()
         del state_with_no_invite[(EventTypes.Member, self.allowed_invitee)]
 
-        # Test that can't send a 3PID invite to a room that already has two members.
         allowed = await self.module._check_event_allowed(
             event=self._new_membership_event(
                 self.room_creator,
