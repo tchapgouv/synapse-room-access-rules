@@ -1489,6 +1489,10 @@ class RoomAccessRules(object):
         visibility = self._get_room_visibility(state_events)
         if visibility == Visibility.PUBLIC:
             retention = event.content.get("max_lifetime")
+            # This is a workaround so that we can run the fixer slowly, by putting the retention to a bigger value
+            # like 2 years, wait for the fixer to catch up before reducing it back until we reach 3 months.
+            if retention is not None and self.config.target_public_rooms_retention:
+                return True
             if retention is None or retention > THREE_MONTHS_MS:
                 return False
 
