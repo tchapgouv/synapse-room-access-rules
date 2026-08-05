@@ -141,6 +141,8 @@ The following boolean flags can be used to enable automatic fixes (jobs) for exi
 
 * `fix_visibility_access_rules` (default: `false`): When enabled, automatically updates the `visibility` attribute in the `im.vector.room.access_rules` event for public rooms that are missing this attribute. Runs once on startup.
 
+* `target_public_rooms_retention` (default: ``): When set to a non-empty value, set the retention period for public rooms to the specified value if the room does not already have an inferior retention period.
+
 ## Development and Testing
 
 This repository uses `tox` to run tests.
