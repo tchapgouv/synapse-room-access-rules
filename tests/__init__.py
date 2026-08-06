@@ -63,7 +63,6 @@ class MockHomeserver:
     def get_storage_controllers(self):
         storage_controllers = Mock()
         storage_controllers.main.get_public_room_ids = AsyncMock(return_value=[])
-        storage_controllers.state.get_current_state_ids = AsyncMock(return_value={})
         return storage_controllers
 
 

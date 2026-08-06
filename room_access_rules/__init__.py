@@ -927,15 +927,7 @@ class RoomAccessRules(object):
         self,
         event: EventBase,
     ) -> Literal["NOT_SPAM"] | Codes:
-        state_ids = await self.storage_controllers.state.get_current_state_ids(
-            event.room_id,
-            await_full_state=False,
-        )
-        events = await self.store.get_events(state_ids.values())
-        state_events: StateMap[EventBase] = {
-            key: events[event_id] for key, event_id in state_ids.items()
-        }
-
+        state_events = await self.get_room_state(event.room_id)
         if await self._check_event_allowed(event, state_events):
             return "NOT_SPAM"
         return Codes.FORBIDDEN
