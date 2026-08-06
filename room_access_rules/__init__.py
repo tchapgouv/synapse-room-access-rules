@@ -133,11 +133,12 @@ class RoomAccessRules(object):
         # We keep using on_create_room because user_may_create_room doesn't allow us to
         # change the initial state (needed to force the encryption or the visibility).
         self.module_api.register_third_party_rules_callbacks(
+            check_event_allowed=self.check_event_allowed,
             on_create_room=self.on_create_room,
             check_visibility_can_be_modified=self.check_visibility_can_be_modified,
         )
         self.module_api.register_spam_checker_callbacks(
-            check_event_for_spam=self.check_event_for_spam,
+            # check_event_for_spam=self.check_event_for_spam,
             user_may_send_3pid_invite=self.user_may_send_3pid_invite,
         )
 
@@ -931,6 +932,13 @@ class RoomAccessRules(object):
         if await self._check_event_allowed(event, state_events):
             return "NOT_SPAM"
         return Codes.FORBIDDEN
+
+    async def check_event_allowed(
+        self,
+        event: EventBase,
+        state_events: StateMap[EventBase],
+    ) -> Tuple[bool, Optional[Dict[str, Any]]]:
+        return await self._check_event_allowed(event, state_events), None
 
     async def _check_event_allowed(
         self,
