@@ -138,6 +138,8 @@ class RoomAccessRules(object):
         )
         self.module_api.register_spam_checker_callbacks(
             check_event_for_spam=self.check_event_for_spam,
+            user_may_invite=self.user_may_invite,
+            user_may_join_room=self.user_may_join_room,
             user_may_send_3pid_invite=self.user_may_send_3pid_invite,
         )
 
@@ -932,6 +934,30 @@ class RoomAccessRules(object):
             return "NOT_SPAM"
         return Codes.FORBIDDEN
 
+    async def user_may_invite(
+        self, inviter: str, invitee: str, room_id: str
+    ) -> Literal["NOT_SPAM"] | Codes:
+        state_events = await self.get_room_state(room_id)
+        rule = self._get_rule_from_state(state_events)
+
+        if await self._on_membership_or_invite(
+            EventTypes.Member, Membership.INVITE, invitee, rule, state_events
+        ):
+            return "NOT_SPAM"
+        return Codes.FORBIDDEN
+
+    async def user_may_join_room(
+        self, user: str, room_id: str, is_invited: bool
+    ) -> Literal["NOT_SPAM"] | Codes:
+        state_events = await self.get_room_state(room_id)
+        rule = self._get_rule_from_state(state_events)
+
+        if await self._on_membership_or_invite(
+            EventTypes.Member, Membership.JOIN, user, rule, state_events
+        ):
+            return "NOT_SPAM"
+        return Codes.FORBIDDEN
+
     async def _check_event_allowed(
         self,
         event: EventBase,
@@ -971,7 +997,9 @@ class RoomAccessRules(object):
                 event.type == EventTypes.Member
                 or event.type == EventTypes.ThirdPartyInvite
             ):
-                return await self._on_membership_or_invite(event, rule, state_events)
+                return await self._on_membership_or_invite(
+                    event.type, event.membership, event.state_key, rule, state_events
+                )
 
             if event.type == EventTypes.JoinRules:
                 return self._on_join_rule_change(event, rule, state_events)
@@ -1144,7 +1172,9 @@ class RoomAccessRules(object):
 
     async def _on_membership_or_invite(
         self,
-        event: EventBase,
+        event_type: str,
+        membership: str,
+        state_key: str,
         rule: str,
         state_events: StateMap[EventBase],
     ) -> bool:
@@ -1163,8 +1193,8 @@ class RoomAccessRules(object):
 
         # Let's ignore rules if the user is accepting an invite coming from
         # an user in the bypass list or an admin
-        if event.type == EventTypes.Member and event.membership == Membership.JOIN:
-            previous_membership = state_events.get((EventTypes.Member, event.state_key))
+        if event_type == EventTypes.Member and membership == Membership.JOIN:
+            previous_membership = state_events.get((EventTypes.Member, state_key))
             if (
                 previous_membership
                 and previous_membership.membership == Membership.INVITE
@@ -1174,26 +1204,39 @@ class RoomAccessRules(object):
 
         # Let's ignore rules if the invited user is in the bypass list or an admin
         if (
-            event.type == EventTypes.Member
-            and event.membership == Membership.INVITE
-            and await self._user_can_bypass_rules(event.state_key)
+            event_type == EventTypes.Member
+            and membership == Membership.INVITE
+            and await self._user_can_bypass_rules(state_key)
         ):
             return True
 
         if rule == AccessRules.RESTRICTED:
-            ret = self._on_membership_or_invite_restricted(event)
+            ret = self._on_membership_or_invite_restricted(
+                event_type, membership, state_key
+            )
         elif rule == AccessRules.UNRESTRICTED:
-            ret = self._on_membership_or_invite_unrestricted(event, state_events)
+            ret = self._on_membership_or_invite_unrestricted(
+                event_type, membership, state_key, state_events
+            )
         elif rule == AccessRules.DIRECT:
-            ret = self._on_membership_or_invite_direct(event, state_events)
+            ret = self._on_membership_or_invite_direct(
+                event_type, membership, state_key, state_events
+            )
         else:
             # We currently apply the default (restricted) if we don't know the rule, we
             # might want to change that in the future.
-            ret = self._on_membership_or_invite_restricted(event)
+            ret = self._on_membership_or_invite_restricted(
+                event_type, membership, state_key
+            )
 
         return ret
 
-    def _on_membership_or_invite_restricted(self, event: EventBase) -> bool:
+    def _on_membership_or_invite_restricted(
+        self,
+        event_type: str,
+        membership: str,
+        state_key: str,
+    ) -> bool:
         """Implements the checks and behaviour specified for the "restricted" rule.
 
         "restricted" currently means that users can only invite users if their server is
@@ -1208,21 +1251,25 @@ class RoomAccessRules(object):
         # We're not applying the rules on m.room.third_party_member events here because
         # the filtering on threepids is done in check_threepid_can_be_invited, which is
         # called before check_event_allowed.
-        if event.type == EventTypes.ThirdPartyInvite:
+        if event_type == EventTypes.ThirdPartyInvite:
             return True
 
         # We only need to process "join" and "invite" memberships, in order to be backward
         # compatible, e.g. if a user from a blacklisted server joined a restricted room
         # before the rules started being enforced on the server, that user must be able to
         # leave it.
-        if event.membership not in [Membership.JOIN, Membership.INVITE]:
+        if membership not in [Membership.JOIN, Membership.INVITE]:
             return True
 
-        invitee_domain = UserID.from_string(event.state_key).domain
+        invitee_domain = UserID.from_string(state_key).domain
         return invitee_domain not in self.config.domains_forbidden_when_restricted
 
     def _on_membership_or_invite_unrestricted(
-        self, event: EventBase, state_events: StateMap[EventBase]
+        self,
+        event_type: str,
+        membership: str,
+        state_key: str,
+        state_events: StateMap[EventBase],
     ) -> bool:
         """Implements the checks and behaviour specified for the "unrestricted" rule.
 
@@ -1233,19 +1280,21 @@ class RoomAccessRules(object):
         """
         # If this is a join from a forbidden user and they don't have an invite to the
         # room, then deny it
-        if event.type == EventTypes.Member and event.membership == Membership.JOIN:
+        if event_type == EventTypes.Member and membership == Membership.JOIN:
             # Check if this user is from a forbidden server
-            target_domain = UserID.from_string(event.state_key).domain
+            target_domain = UserID.from_string(state_key).domain
             if target_domain in self.config.domains_forbidden_when_restricted:
                 # If so, they'll need an invite to join this room. Check if one exists
-                if not self._user_is_invited_to_room(event.state_key, state_events):
+                if not self._user_is_invited_to_room(state_key, state_events):
                     return False
 
         return True
 
     def _on_membership_or_invite_direct(
         self,
-        event: EventBase,
+        event_type: str,
+        membership: str,
+        state_key: str,
         state_events: StateMap[EventBase],
     ) -> bool:
         """Implements the checks and behaviour specified for the "direct" rule.
@@ -1272,25 +1321,25 @@ class RoomAccessRules(object):
         # given we know they have a Matrix account binded to the address (so they could
         # join the first time), Synapse will successfully look it up before attempting to
         # store an invite on the IS.
-        if len(threepid_tokens) == 1 and event.type == EventTypes.ThirdPartyInvite:
+        if len(threepid_tokens) == 1 and event_type == EventTypes.ThirdPartyInvite:
             # If we already have a 3PID invite in flight, don't accept another one, unless
             # the new one has the same invite token as its state key. This is because 3PID
             # invite revocations must be allowed, and a revocation is basically a new 3PID
             # invite event with an empty content and the same token as the invite it
             # revokes.
-            return event.state_key in threepid_tokens
+            return state_key in threepid_tokens
 
         if len(existing_members) == 2:
             # If the user was within the two initial user of the room, Synapse would have
             # looked it up successfully and thus sent a m.room.member here instead of
             # m.room.third_party_invite.
-            if event.type == EventTypes.ThirdPartyInvite:
+            if event_type == EventTypes.ThirdPartyInvite:
                 return False
 
             # We can only have m.room.member events here. The rule in this case is to only
             # allow the event if its target is one of the initial two members in the room,
             # i.e. the state key of one of the two m.room.member states in the room.
-            return event.state_key in existing_members
+            return state_key in existing_members
 
         # We're alone in the room (and always have been) and there's one 3PID invite in
         # flight.
@@ -1300,7 +1349,7 @@ class RoomAccessRules(object):
             # that the only m.room.member event is a join otherwise we wouldn't be able to
             # send an event to the room) or an an invite event which target is the invited
             # user.
-            target = event.state_key
+            target = state_key
             is_from_threepid_invite = self._is_invite_from_threepid(
                 event, threepid_tokens[0]
             )
