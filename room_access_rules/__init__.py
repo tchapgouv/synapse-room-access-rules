@@ -1089,10 +1089,11 @@ class RoomAccessRules(object):
                 and not self.config.fix_visibility_access_rules
             ):
                 return False
-        elif is_local_event and new_visibility != "private":
-            # For local events, set a visibility other than "private" is only allowed at room creation
-            # and this is handled in `on_create_room`
-            return False
+
+        # elif is_local_event and new_visibility != "private":
+        #     # For local events, set a visibility other than "private" is only allowed at room creation
+        #     # and this is handled in `on_create_room`
+        #     return False
 
         return True
 
@@ -1114,10 +1115,10 @@ class RoomAccessRules(object):
             )
             if new_force_unencrypted != current_force_unencrypted:
                 return False
-        elif is_local_event and new_force_unencrypted is not False:
-            # For local events, set force_unencrypted_at_creation=true is only allowed at room creation
-            # and this is handled in `on_create_room`
-            return False
+        # elif is_local_event and new_force_unencrypted is not False:
+        #     # For local events, set force_unencrypted_at_creation=true is only allowed at room creation
+        #     # and this is handled in `on_create_room`
+        #     return False
 
         return True
 

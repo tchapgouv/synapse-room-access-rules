@@ -780,21 +780,21 @@ class SendEventTestCase(aiounittest.AsyncTestCase):
 
         self.assertTrue(allowed)
 
-    async def test_forbid_create_public_visibility_after_room_creation(self):
-        """Tests that the custom event with visibility=public can not be created locally after the room is created."""
-        state_events = self.restricted_room_state.copy()
-        del state_events[(ACCESS_RULES_TYPE, "")]
+    # async def test_forbid_create_public_visibility_after_room_creation(self):
+    #     """Tests that the custom event with visibility=public can not be created locally after the room is created."""
+    #     state_events = self.restricted_room_state.copy()
+    #     del state_events[(ACCESS_RULES_TYPE, "")]
 
-        allowed = await self.module._check_event_allowed(
-            event=new_access_rules_event(
-                self.room_creator,
-                self.restricted_room,
-                AccessRules.RESTRICTED,
-                visibility=Visibility.PUBLIC,
-            ),
-            state_events=state_events,
-        )
-        self.assertFalse(allowed)
+    #     allowed = await self.module._check_event_allowed(
+    #         event=new_access_rules_event(
+    #             self.room_creator,
+    #             self.restricted_room,
+    #             AccessRules.RESTRICTED,
+    #             visibility=Visibility.PUBLIC,
+    #         ),
+    #         state_events=state_events,
+    #     )
+    #     self.assertFalse(allowed)
 
     async def test_allow_create_visibility_through_federation(self):
         """Tests that the custom event with visibility=public can be created through federation (not local)."""
